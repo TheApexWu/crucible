@@ -10,109 +10,135 @@
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   :root{
-    --bg:#0a0c10;--surface:#0f1117;--surface2:#161b26;
-    --border:#1e2535;--border-bright:#2e3a52;
-    --text:#c9d1d9;--dim:#6b7280;--bright:#f0f6fc;
-    --split:#3b82f6;--steal:#ef4444;--accent:#8b5cf6;
-    --green:#22c55e;--amber:#f59e0b;
-    --split-glow:#3b82f620;--steal-glow:#ef444420;
+    --bg:#08090c;--surface:#0d0f14;--surface2:#13161e;
+    --border:#1a1e2a;--border-bright:#2a3040;
+    --text:#c9d1d9;--dim:#555e6e;--bright:#f0f6fc;
+    /* NEW COLOR SCHEME */
+    --agent-a:#3b8bff;--agent-a-dim:#3b8bff40;--agent-a-glow:#3b8bff18;
+    --agent-b:#ff8b3b;--agent-b-dim:#ff8b3b40;--agent-b-glow:#ff8b3b18;
+    --coop:#e8eaed;--coop-dim:#e8eaed50;--coop-bg:#e8eaed10;
+    --destruct:#ff3b4f;--destruct-dim:#ff3b4f50;--destruct-bg:#ff3b4f12;
+    --accent:#8b5cf6;
   }
   body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;
-    background-image:linear-gradient(var(--surface2) 1px,transparent 1px),linear-gradient(90deg,var(--surface2) 1px,transparent 1px);
-    background-size:40px 40px}
+    background-image:radial-gradient(circle at 20% 50%,#3b8bff06 0%,transparent 50%),radial-gradient(circle at 80% 50%,#ff8b3b06 0%,transparent 50%)}
 
-  /* ── LAYOUT ── */
-  .app{display:grid;grid-template-rows:auto 1fr auto;height:100vh}
+  /* LAYOUT */
+  .app{display:grid;grid-template-rows:auto 1fr auto auto;height:100vh}
 
-  /* ── HEADER ── */
-  .header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);background:var(--surface)}
+  /* HEADER */
+  .header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--surface)}
   .header-left{display:flex;align-items:center;gap:16px}
   .logo{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--bright);letter-spacing:4px}
-  .logo-sub{font-size:11px;color:var(--dim);letter-spacing:0.5px}
-  .header-metrics{display:flex;gap:24px;align-items:center}
-  .hm{text-align:center}
-  .hm-val{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
-  .hm-lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px}
+  .logo-sub{font-size:10px;color:var(--dim);letter-spacing:0.5px;margin-top:2px}
+  .header-metrics{display:flex;gap:20px;align-items:center}
+  .hm{text-align:center;padding:0 8px}
+  .hm-val{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
+  .hm-lbl{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:0.8px;margin-top:2px}
 
-  /* ── MAIN ── */
-  .main{display:grid;grid-template-columns:1fr 2px 1fr;grid-template-rows:1fr auto;overflow:hidden}
+  /* Round search */
+  .round-nav{display:flex;align-items:center;gap:8px}
+  .round-input{width:56px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--bright);font-family:'JetBrains Mono',monospace;font-size:13px;padding:5px 8px;text-align:center;outline:none}
+  .round-input:focus{border-color:var(--accent)}
+  .round-total{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim)}
+  .nav-btn{background:var(--surface2);border:1px solid var(--border);color:var(--dim);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+  .nav-btn:hover{border-color:var(--accent);color:var(--bright)}
 
-  /* ── AGENT PANELS ── */
+  /* MAIN */
+  .main{display:grid;grid-template-columns:1fr 2px 1fr;overflow:hidden}
+
+  /* AGENT PANELS */
   .agent-panel{display:flex;flex-direction:column;overflow:hidden}
-  .agent-header{padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface)}
+  .agent-header{padding:10px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface)}
   .agent-name{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;display:flex;align-items:center;gap:6px}
   .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
-  .dot-a{background:var(--split)}.dot-b{background:var(--steal)}
+  .dot-a{background:var(--agent-a)}.dot-b{background:var(--agent-b)}
   .agent-score{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600}
+  .first-badge{font-size:8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--dim);letter-spacing:0.5px;margin-left:6px}
 
-  .agent-body{flex:1;overflow-y:auto;padding:16px 20px}
-  .bubble{padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:8px;line-height:1.5;max-width:95%;animation:fadeIn .3s ease}
-  .bubble.public{background:color-mix(in srgb,var(--text) 5%,transparent);border:1px solid color-mix(in srgb,var(--text) 8%,transparent)}
-  .bubble.private{background:color-mix(in srgb,var(--accent) 6%,transparent);border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);font-style:italic;color:var(--dim);font-size:12px;margin-top:12px}
-  .bubble.private::before{content:'PRIVATE REFLECTION';font-size:8px;font-weight:700;color:var(--accent);letter-spacing:0.5px;display:block;margin-bottom:4px;font-style:normal}
-  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .agent-body{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:6px}
 
-  .voice-btn{display:inline-flex;align-items:center;gap:4px;background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent);padding:4px 10px;border-radius:6px;font-size:10px;font-family:'JetBrains Mono',monospace;cursor:pointer;margin-top:4px;transition:all .15s}
-  .voice-btn:hover{background:color-mix(in srgb,var(--accent) 20%,transparent)}
-  .voice-btn.playing{background:var(--accent);color:var(--bg)}
+  /* iMessage-style bubbles */
+  .msg-row{display:flex;flex-direction:column}
+  .msg-row.self{align-items:flex-end}
+  .msg-row.other{align-items:flex-start}
+  .msg-speaker{font-size:8px;color:var(--dim);font-family:'JetBrains Mono',monospace;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:2px;padding:0 4px}
+  .bubble{padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.55;max-width:88%;animation:fadeIn .3s ease;word-wrap:break-word}
+  .panel-a .msg-row.self .bubble{background:var(--agent-a);color:#fff;border-bottom-right-radius:4px}
+  .panel-a .msg-row.other .bubble{background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:4px}
+  .panel-b .msg-row.self .bubble{background:var(--agent-b);color:#fff;border-bottom-right-radius:4px}
+  .panel-b .msg-row.other .bubble{background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:4px}
 
-  /* ── DIVIDER ── */
-  .divider-glow{background:linear-gradient(180deg,transparent,var(--steal),var(--accent),var(--split),transparent);opacity:.3;animation:pulse 3s ease-in-out infinite}
-  @keyframes pulse{0%,100%{opacity:.15}50%{opacity:.5}}
+  .reflection{margin-top:12px;padding:12px 14px;border-radius:12px;font-size:12px;line-height:1.55;font-style:italic;color:var(--dim);max-width:95%;animation:fadeIn .4s ease}
+  .panel-a .reflection{background:var(--agent-a-glow);border:1px solid var(--agent-a-dim)}
+  .panel-b .reflection{background:var(--agent-b-glow);border:1px solid var(--agent-b-dim)}
+  .reflection::before{content:'PRIVATE REFLECTION';font-size:8px;font-weight:700;letter-spacing:0.5px;display:block;margin-bottom:4px;font-style:normal}
+  .panel-a .reflection::before{color:var(--agent-a)}
+  .panel-b .reflection::before{color:var(--agent-b)}
 
-  /* ── CHOICE REVEAL ── */
-  .reveal-bar{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:40px;padding:20px;border-top:1px solid var(--border);background:var(--surface);min-height:80px}
-  .flip-card{width:80px;height:110px;perspective:600px;cursor:pointer}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .voice-btn{display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);color:var(--dim);padding:4px 10px;border-radius:6px;font-size:10px;font-family:'JetBrains Mono',monospace;cursor:pointer;margin-top:4px;transition:all .15s}
+  .voice-btn:hover{border-color:var(--accent);color:var(--bright)}
+  .voice-btn.playing{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  /* DIVIDER */
+  .divider-glow{background:linear-gradient(180deg,transparent,var(--agent-a),#fff,var(--agent-b),transparent);opacity:.2;animation:pulse 4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.1}50%{opacity:.35}}
+
+  /* REVEAL BAR */
+  .reveal-bar{display:flex;align-items:center;justify-content:center;gap:40px;padding:16px;border-top:1px solid var(--border);background:var(--surface)}
+  .flip-card{width:72px;height:100px;perspective:600px;cursor:pointer}
   .flip-inner{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .5s}
   .flip-card.flipped .flip-inner{transform:rotateY(180deg)}
-  .flip-face{position:absolute;inset:0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:1px;backface-visibility:hidden}
+  .flip-face{position:absolute;inset:0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:1px;backface-visibility:hidden}
   .flip-front{background:var(--surface2);border:2px solid var(--border);color:var(--dim)}
-  .flip-front::after{content:'?';font-size:28px;color:var(--dim)}
+  .flip-front::after{content:'?';font-size:26px;color:var(--dim)}
   .flip-back{transform:rotateY(180deg);border:2px solid}
-  .flip-back.split{background:color-mix(in srgb,var(--split) 12%,transparent);border-color:var(--split);color:var(--split);box-shadow:0 0 24px var(--split-glow)}
-  .flip-back.steal{background:color-mix(in srgb,var(--steal) 12%,transparent);border-color:var(--steal);color:var(--steal);box-shadow:0 0 24px var(--steal-glow)}
-  .flip-label{font-size:9px;color:var(--dim);text-align:center;margin-top:6px;font-family:'JetBrains Mono',monospace;letter-spacing:1px;text-transform:uppercase}
-  .reveal-outcome{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim);max-width:120px;text-align:center;line-height:1.4}
-  .reveal-round{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--bright);margin-bottom:4px}
+  .flip-back.split{background:var(--coop-bg);border-color:var(--coop-dim);color:var(--coop)}
+  .flip-back.steal-a{background:var(--agent-a-glow);border-color:var(--agent-a);color:var(--agent-a);box-shadow:0 0 20px var(--agent-a-glow)}
+  .flip-back.steal-b{background:var(--agent-b-glow);border-color:var(--agent-b);color:var(--agent-b);box-shadow:0 0 20px var(--agent-b-glow)}
+  .flip-back.steal-md{background:var(--destruct-bg);border-color:var(--destruct);color:var(--destruct);box-shadow:0 0 20px var(--destruct-bg)}
+  .flip-label{font-size:9px;color:var(--dim);text-align:center;margin-top:5px;font-family:'JetBrains Mono',monospace;letter-spacing:1px;text-transform:uppercase}
+  .reveal-center{text-align:center}
+  .reveal-round{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--bright)}
+  .reveal-outcome{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);margin-top:4px;line-height:1.4}
+  .bonus-badge{display:inline-block;background:#fbbf2420;border:1px solid #fbbf2450;color:#fbbf24;font-size:9px;font-family:'JetBrains Mono',monospace;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:600}
 
-  /* ── FOOTER: TIMELINE + METRICS ── */
+  /* FOOTER */
   .footer{border-top:1px solid var(--border);background:var(--surface)}
   .footer-tabs{display:flex;border-bottom:1px solid var(--border)}
-  .footer-tab{padding:8px 20px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--dim);cursor:pointer;letter-spacing:0.5px;border-bottom:2px solid transparent;transition:all .15s}
+  .footer-tab{padding:7px 18px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--dim);cursor:pointer;letter-spacing:0.5px;border-bottom:2px solid transparent;transition:all .15s;text-transform:uppercase}
   .footer-tab:hover{color:var(--text)}
-  .footer-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .footer-tab.active{color:var(--bright);border-bottom-color:var(--bright)}
 
-  .footer-content{padding:16px 24px}
+  .footer-content{padding:12px 24px}
   .footer-panel{display:none}
   .footer-panel.active{display:block}
 
   /* Timeline */
-  .timeline{display:flex;gap:1px;height:28px;align-items:stretch;border-radius:4px;overflow:hidden;cursor:pointer}
-  .tl-tick{flex:1;min-width:4px;transition:all .1s;position:relative}
-  .tl-tick:hover{transform:scaleY(1.4);z-index:1}
+  .timeline{display:flex;gap:1px;height:24px;align-items:stretch;border-radius:4px;overflow:hidden;cursor:pointer}
+  .tl-tick{flex:1;min-width:3px;transition:all .1s;position:relative}
+  .tl-tick:hover{transform:scaleY(1.5);z-index:1}
   .tl-tick.active{outline:2px solid var(--bright);outline-offset:-1px;z-index:2}
-  .tl-tick.coop{background:var(--split);opacity:.6}.tl-tick.coop:hover,.tl-tick.coop.active{opacity:1}
-  .tl-tick.ba{background:var(--steal);opacity:.75}
-  .tl-tick.bb{background:var(--amber);opacity:.75}
-  .tl-tick.md{background:color-mix(in srgb,var(--steal) 65%,#000);opacity:.85}
-  .tl-legend{display:flex;gap:14px;font-size:10px;color:var(--dim);margin-top:8px}
-  .tl-legend span::before{content:'';display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
-  .l-coop::before{background:var(--split)}.l-ba::before{background:var(--steal)}.l-bb::before{background:var(--amber)}.l-md::before{background:color-mix(in srgb,var(--steal) 65%,#000)}
+  .tl-tick.coop{background:var(--coop);opacity:.35}.tl-tick.coop:hover,.tl-tick.coop.active{opacity:.7}
+  .tl-tick.a-win{background:var(--agent-a);opacity:.7}
+  .tl-tick.b-win{background:var(--agent-b);opacity:.7}
+  .tl-tick.md{background:var(--destruct);opacity:.6}
+  .tl-legend{display:flex;gap:16px;font-size:9px;color:var(--dim);margin-top:6px;font-family:'JetBrains Mono',monospace}
+  .tl-legend span{display:flex;align-items:center;gap:4px}
+  .tl-legend span::before{content:'';display:inline-block;width:8px;height:8px;border-radius:2px}
+  .l-coop::before{background:var(--coop);opacity:.5}.l-aw::before{background:var(--agent-a)}.l-bw::before{background:var(--agent-b)}.l-md::before{background:var(--destruct)}
 
   /* Metrics */
-  .metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-  .m-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center}
-  .m-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
-  .m-lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}
-  .m-spark{height:36px;display:flex;align-items:flex-end;gap:1px;margin-top:8px;justify-content:center}
+  .metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .m-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+  .m-val{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+  .m-lbl{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}
+  .m-spark{height:32px;display:flex;align-items:flex-end;gap:1px;margin-top:6px;justify-content:center}
   .m-bar{min-width:2px;border-radius:1px;flex:1}
 
-  /* Chart placeholder */
-  .chart{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:12px}
-  .chart canvas{width:100%;height:100px}
-
-  /* ── LOADING ── */
-  .loading{display:flex;align-items:center;justify-content:center;height:100%;color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:13px}
+  .loading{display:flex;align-items:center;justify-content:center;height:100%;color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:12px}
 </style>
 </head>
 <body>
@@ -127,51 +153,52 @@
       </div>
     </div>
     <div class="header-metrics">
-      <div class="hm"><div class="hm-val" style="color:var(--steal)" id="hm-di">--</div><div class="hm-lbl">Deception Index</div></div>
-      <div class="hm"><div class="hm-val" style="color:var(--split)" id="hm-coop">--</div><div class="hm-lbl">Cooperation</div></div>
-      <div class="hm"><div class="hm-val" style="color:var(--amber)" id="hm-md">--</div><div class="hm-lbl">Mutual Dest.</div></div>
-      <div class="hm"><div class="hm-val" id="hm-round">--</div><div class="hm-lbl">Round</div></div>
+      <div class="hm"><div class="hm-val" style="color:var(--destruct)" id="hm-di">--</div><div class="hm-lbl">Deception Index</div></div>
+      <div class="hm"><div class="hm-val" style="color:var(--coop)" id="hm-coop">--</div><div class="hm-lbl">Cooperation</div></div>
+      <div class="hm"><div class="hm-val" style="color:var(--destruct)" id="hm-md">--</div><div class="hm-lbl">Mutual Dest.</div></div>
+      <div class="round-nav">
+        <button class="nav-btn" onclick="showRound(currentRound-1)">&lt;</button>
+        <input class="round-input" id="round-input" type="number" min="1" value="1">
+        <span class="round-total" id="round-total">/ --</span>
+        <button class="nav-btn" onclick="showRound(currentRound+1)">&gt;</button>
+      </div>
     </div>
   </div>
 
   <!-- MAIN: SPLIT SCREEN -->
   <div class="main">
-    <div class="agent-panel" id="panel-a">
+    <div class="agent-panel panel-a" id="panel-a">
       <div class="agent-header">
-        <div class="agent-name"><span class="dot dot-a"></span> Agent A</div>
-        <div class="agent-score" id="score-a">$0</div>
+        <div class="agent-name"><span class="dot dot-a"></span> Agent A <span class="first-badge" id="first-a" style="display:none">SPEAKS FIRST</span></div>
+        <div class="agent-score" id="score-a" style="color:var(--agent-a)">$0</div>
       </div>
-      <div class="agent-body" id="body-a"><div class="loading">Load game data...</div></div>
+      <div class="agent-body" id="body-a"><div class="loading">Loading...</div></div>
     </div>
 
     <div class="divider-glow"></div>
 
-    <div class="agent-panel" id="panel-b">
+    <div class="agent-panel panel-b" id="panel-b">
       <div class="agent-header">
-        <div class="agent-name"><span class="dot dot-b"></span> Agent B</div>
-        <div class="agent-score" id="score-b">$0</div>
+        <div class="agent-name"><span class="dot dot-b"></span> Agent B <span class="first-badge" id="first-b" style="display:none">SPEAKS FIRST</span></div>
+        <div class="agent-score" id="score-b" style="color:var(--agent-b)">$0</div>
       </div>
-      <div class="agent-body" id="body-b"><div class="loading">Load game data...</div></div>
+      <div class="agent-body" id="body-b"><div class="loading">Loading...</div></div>
     </div>
+  </div>
 
-    <!-- CHOICE REVEAL -->
-    <div class="reveal-bar">
-      <div>
-        <div class="flip-card" id="card-a" onclick="flipCard('a')">
-          <div class="flip-inner"><div class="flip-face flip-front"></div><div class="flip-face flip-back" id="card-a-back">?</div></div>
-        </div>
-        <div class="flip-label">Agent A</div>
-      </div>
-      <div>
-        <div class="reveal-round" id="reveal-round">Round --</div>
-        <div class="reveal-outcome" id="reveal-outcome"></div>
-      </div>
-      <div>
-        <div class="flip-card" id="card-b" onclick="flipCard('b')">
-          <div class="flip-inner"><div class="flip-face flip-front"></div><div class="flip-face flip-back" id="card-b-back">?</div></div>
-        </div>
-        <div class="flip-label">Agent B</div>
-      </div>
+  <!-- REVEAL BAR -->
+  <div class="reveal-bar">
+    <div>
+      <div class="flip-card" id="card-a"><div class="flip-inner"><div class="flip-face flip-front"></div><div class="flip-face flip-back" id="card-a-back">?</div></div></div>
+      <div class="flip-label">Agent A</div>
+    </div>
+    <div class="reveal-center">
+      <div class="reveal-round" id="reveal-round">Round --</div>
+      <div class="reveal-outcome" id="reveal-outcome"></div>
+    </div>
+    <div>
+      <div class="flip-card" id="card-b"><div class="flip-inner"><div class="flip-face flip-front"></div><div class="flip-face flip-back" id="card-b-back">?</div></div></div>
+      <div class="flip-label">Agent B</div>
     </div>
   </div>
 
@@ -185,9 +212,9 @@
       <div class="footer-panel active" id="tab-timeline">
         <div class="timeline" id="timeline"></div>
         <div class="tl-legend">
-          <span class="l-coop">Both Split</span>
-          <span class="l-ba">A Betrayed B</span>
-          <span class="l-bb">B Betrayed A</span>
+          <span class="l-coop">Cooperation</span>
+          <span class="l-aw">A Wins</span>
+          <span class="l-bw">B Wins</span>
           <span class="l-md">Mutual Destruction</span>
         </div>
       </div>
@@ -199,132 +226,119 @@
 </div>
 
 <script>
-// ── STATE ──
-let gameData = null;
-let metricsData = null;
-let currentRound = 1;
-let currentAudio = null;
+let gameData = null, metricsData = null, currentRound = 1, currentAudio = null;
 
-// ── DATA LOADING ──
 async function loadData() {
   try {
-    const [gameResp, metricsResp] = await Promise.all([
-      fetch('../data/latest_game.json'),
-      fetch('../data/latest_metrics.json'),
-    ]);
-    gameData = await gameResp.json();
-    metricsData = await metricsResp.json();
+    const [g, m] = await Promise.all([fetch('../data/latest_game.json'), fetch('../data/latest_metrics.json')]);
+    gameData = await g.json();
+    metricsData = await m.json();
     init();
   } catch (e) {
-    document.getElementById('body-a').innerHTML = '<div class="loading">Failed to load data. Run the engine first.</div>';
-    document.getElementById('body-b').innerHTML = '<div class="loading">Check data/latest_game.json exists.</div>';
+    document.getElementById('body-a').innerHTML = '<div class="loading">Failed to load. Run engine first.</div>';
   }
 }
 
 function init() {
-  // Header metrics
   document.getElementById('hm-di').textContent = metricsData.deception_index.toFixed(0);
   document.getElementById('hm-coop').textContent = (metricsData.cooperation_rate * 100).toFixed(0) + '%';
   document.getElementById('hm-md').textContent = (metricsData.mutual_destruction_rate * 100).toFixed(0) + '%';
-
-  // Build timeline
+  document.getElementById('round-total').textContent = '/ ' + gameData.rounds.length;
+  document.getElementById('round-input').max = gameData.rounds.length;
   buildTimeline();
-
-  // Build metrics panel
   buildMetrics();
-
-  // Show round 1
   showRound(1);
 }
 
-// ── TIMELINE ──
+// TIMELINE
 function buildTimeline() {
-  const container = document.getElementById('timeline');
-  container.innerHTML = '';
+  const c = document.getElementById('timeline');
+  c.innerHTML = '';
   gameData.rounds.forEach((r, i) => {
-    const tick = document.createElement('div');
-    tick.className = 'tl-tick';
-
+    const t = document.createElement('div');
+    t.className = 'tl-tick';
     const ac = r.agent_a_choice, bc = r.agent_b_choice;
-    if (ac === 'split' && bc === 'split') tick.classList.add('coop');
-    else if (ac === 'steal' && bc === 'split') tick.classList.add('ba');
-    else if (ac === 'split' && bc === 'steal') tick.classList.add('bb');
-    else tick.classList.add('md');
-
-    tick.title = `Round ${i + 1}`;
-    tick.onclick = () => showRound(i + 1);
-    container.appendChild(tick);
+    if (ac === 'split' && bc === 'split') t.classList.add('coop');
+    else if (ac === 'steal' && bc === 'split') t.classList.add('a-win');
+    else if (ac === 'split' && bc === 'steal') t.classList.add('b-win');
+    else t.classList.add('md');
+    t.title = 'Round ' + (i + 1);
+    t.onclick = () => showRound(i + 1);
+    c.appendChild(t);
   });
 }
 
-// ── SHOW ROUND ──
+// SHOW ROUND
 function showRound(n) {
+  if (!gameData) return;
+  n = Math.max(1, Math.min(n, gameData.rounds.length));
   currentRound = n;
   const r = gameData.rounds[n - 1];
-  if (!r) return;
 
-  // Update header
-  document.getElementById('hm-round').textContent = n + '/' + gameData.rounds.length;
+  document.getElementById('round-input').value = n;
   document.getElementById('score-a').textContent = '$' + r.agent_a_total;
   document.getElementById('score-b').textContent = '$' + r.agent_b_total;
 
-  // Highlight timeline tick
-  document.querySelectorAll('.tl-tick').forEach((t, i) => {
-    t.classList.toggle('active', i === n - 1);
-  });
+  // Who speaks first
+  const firstSpeaker = r.first_speaker || (r.conversation.length > 0 ? r.conversation[0][0] : 'A');
+  document.getElementById('first-a').style.display = firstSpeaker === 'A' ? 'inline' : 'none';
+  document.getElementById('first-b').style.display = firstSpeaker === 'B' ? 'inline' : 'none';
 
-  // Agent A panel
-  const bodyA = document.getElementById('body-a');
-  let htmlA = '';
-  r.conversation.forEach(([speaker, msg]) => {
-    if (speaker === 'A') {
-      htmlA += `<div class="bubble public">${escHtml(msg)}</div>`;
-    }
-  });
-  // Voice button for public
-  htmlA += makeVoiceBtn(n, 'a', 'public');
-  // Private reflection
-  if (r.agent_a_reflection) {
-    htmlA += `<div class="bubble private">${escHtml(r.agent_a_reflection)}</div>`;
-    htmlA += makeVoiceBtn(n, 'a', 'private');
-  }
-  bodyA.innerHTML = htmlA;
+  // Timeline highlight
+  document.querySelectorAll('.tl-tick').forEach((t, i) => t.classList.toggle('active', i === n - 1));
 
-  // Agent B panel
-  const bodyB = document.getElementById('body-b');
-  let htmlB = '';
-  r.conversation.forEach(([speaker, msg]) => {
-    if (speaker === 'B') {
-      htmlB += `<div class="bubble public">${escHtml(msg)}</div>`;
-    }
-  });
-  htmlB += makeVoiceBtn(n, 'b', 'public');
-  if (r.agent_b_reflection) {
-    htmlB += `<div class="bubble private">${escHtml(r.agent_b_reflection)}</div>`;
-    htmlB += makeVoiceBtn(n, 'b', 'private');
-  }
-  bodyB.innerHTML = htmlB;
+  // Conversation bubbles - iMessage style
+  renderPanel('a', r);
+  renderPanel('b', r);
 
-  // Reset flip cards
+  // Reset then auto-flip cards after delay
   resetCards(r);
+  setTimeout(() => flipCard('a'), 400);
+  setTimeout(() => flipCard('b'), 600);
 
-  // Reveal bar
-  document.getElementById('reveal-round').textContent = 'Round ' + n;
+  // Reveal info
   const ac = r.agent_a_choice, bc = r.agent_b_choice;
+  const mult = r.stake_multiplier || 1;
+  let roundLabel = 'Round ' + n;
+  if (mult > 1) roundLabel += '<span class="bonus-badge">' + mult + 'x</span>';
+  document.getElementById('reveal-round').innerHTML = roundLabel;
+
   let outcome = '';
-  if (ac === 'split' && bc === 'split') outcome = 'Both split. $50 each.';
-  else if (ac === 'steal' && bc === 'split') outcome = 'A stole. A +$100, B +$0.';
-  else if (ac === 'split' && bc === 'steal') outcome = 'B stole. B +$100, A +$0.';
+  if (ac === 'split' && bc === 'split') outcome = 'Both split. $' + (50*mult) + ' each.';
+  else if (ac === 'steal' && bc === 'split') outcome = 'A stole. A +$' + (100*mult) + ', B +$0.';
+  else if (ac === 'split' && bc === 'steal') outcome = 'B stole. B +$' + (100*mult) + ', A +$0.';
   else outcome = 'Both steal. $0 each.';
   document.getElementById('reveal-outcome').textContent = outcome;
 }
 
-function makeVoiceBtn(round, agent, mode) {
-  const file = `../data/audio/round_${String(round).padStart(3,'0')}_${agent}_${mode}.mp3`;
-  return `<button class="voice-btn" onclick="playVoice(this, '${file}')">&#9654; ${mode}</button>`;
+function renderPanel(agent, r) {
+  const body = document.getElementById('body-' + agent);
+  const agentUpper = agent.toUpperCase();
+  let html = '';
+
+  r.conversation.forEach(([speaker, msg]) => {
+    const isSelf = speaker === agentUpper;
+    html += '<div class="msg-row ' + (isSelf ? 'self' : 'other') + '">';
+    html += '<div class="msg-speaker">' + speaker + '</div>';
+    html += '<div class="bubble">' + escHtml(msg) + '</div>';
+    html += '</div>';
+  });
+
+  html += makeVoiceBtn(r.round_number, agent, 'public');
+
+  const ref = agent === 'a' ? r.agent_a_reflection : r.agent_b_reflection;
+  if (ref) {
+    html += '<div class="reflection">' + escHtml(ref) + '</div>';
+    html += makeVoiceBtn(r.round_number, agent, 'private');
+  }
+  body.innerHTML = html;
 }
 
-// ── VOICE PLAYBACK ──
+function makeVoiceBtn(round, agent, mode) {
+  const file = '../data/audio/round_' + String(round).padStart(3,'0') + '_' + agent + '_' + mode + '.mp3';
+  return '<button class="voice-btn" onclick="playVoice(this,\'' + file + '\')">&#9654; ' + mode + '</button>';
+}
+
 function playVoice(btn, src) {
   if (currentAudio) { currentAudio.pause(); document.querySelectorAll('.voice-btn.playing').forEach(b => b.classList.remove('playing')); }
   const audio = new Audio(src);
@@ -335,77 +349,66 @@ function playVoice(btn, src) {
   currentAudio = audio;
 }
 
-// ── FLIP CARDS ──
+// FLIP CARDS
 function resetCards(r) {
-  const cardA = document.getElementById('card-a');
-  const cardB = document.getElementById('card-b');
-  cardA.classList.remove('flipped');
-  cardB.classList.remove('flipped');
-  const backA = document.getElementById('card-a-back');
-  const backB = document.getElementById('card-b-back');
-  backA.textContent = r.agent_a_choice.toUpperCase();
-  backA.className = 'flip-face flip-back ' + r.agent_a_choice;
-  backB.textContent = r.agent_b_choice.toUpperCase();
-  backB.className = 'flip-face flip-back ' + r.agent_b_choice;
-}
-function flipCard(agent) {
-  document.getElementById('card-' + agent).classList.toggle('flipped');
-}
+  const cA = document.getElementById('card-a'), cB = document.getElementById('card-b');
+  cA.classList.remove('flipped'); cB.classList.remove('flipped');
+  const bA = document.getElementById('card-a-back'), bB = document.getElementById('card-b-back');
+  const ac = r.agent_a_choice, bc = r.agent_b_choice;
 
-// ── METRICS ──
+  bA.textContent = ac.toUpperCase();
+  bB.textContent = bc.toUpperCase();
+
+  // Color logic: split=white, steal when other splits=agent color, both steal=red
+  if (ac === 'split') bA.className = 'flip-face flip-back split';
+  else if (bc === 'split') bA.className = 'flip-face flip-back steal-a';
+  else bA.className = 'flip-face flip-back steal-md';
+
+  if (bc === 'split') bB.className = 'flip-face flip-back split';
+  else if (ac === 'split') bB.className = 'flip-face flip-back steal-b';
+  else bB.className = 'flip-face flip-back steal-md';
+}
+function flipCard(agent) { document.getElementById('card-' + agent).classList.add('flipped'); }
+
+// METRICS
 function buildMetrics() {
   const grid = document.getElementById('metrics-grid');
-  const mi = metricsData.mutual_information_series;
-  const ent = metricsData.strategy_entropy_series;
-
-  grid.innerHTML = `
-    <div class="m-card">
-      <div class="m-val" style="color:var(--steal)">${metricsData.deception_index.toFixed(0)}</div>
-      <div class="m-lbl">Deception Index</div>
-      ${sparkline(mi, 'var(--steal)')}
-    </div>
-    <div class="m-card">
-      <div class="m-val" style="color:var(--split)">${(metricsData.cooperation_rate*100).toFixed(0)}%</div>
-      <div class="m-lbl">Cooperation Rate</div>
-    </div>
-    <div class="m-card">
-      <div class="m-val" style="color:var(--accent)">${ent.length ? ent[ent.length-1].toFixed(2) : '--'}</div>
-      <div class="m-lbl">Strategy Entropy</div>
-      ${sparkline(ent, 'var(--accent)')}
-    </div>
-    <div class="m-card">
-      <div class="m-val" style="color:var(--amber)">${(metricsData.mutual_destruction_rate*100).toFixed(0)}%</div>
-      <div class="m-lbl">Mutual Destruction</div>
-    </div>
-  `;
+  const mi = metricsData.mutual_information_series || [];
+  const ent = metricsData.strategy_entropy_series || [];
+  grid.innerHTML =
+    '<div class="m-card"><div class="m-val" style="color:var(--destruct)">' + metricsData.deception_index.toFixed(0) + '</div><div class="m-lbl">Deception Index</div>' + sparkline(mi,'var(--destruct)') + '</div>' +
+    '<div class="m-card"><div class="m-val" style="color:var(--coop)">' + (metricsData.cooperation_rate*100).toFixed(0) + '%</div><div class="m-lbl">Cooperation Rate</div></div>' +
+    '<div class="m-card"><div class="m-val" style="color:var(--accent)">' + (ent.length ? ent[ent.length-1].toFixed(2) : '--') + '</div><div class="m-lbl">Strategy Entropy</div>' + sparkline(ent,'var(--accent)') + '</div>' +
+    '<div class="m-card"><div class="m-val" style="color:var(--destruct)">' + (metricsData.mutual_destruction_rate*100).toFixed(0) + '%</div><div class="m-lbl">Mutual Destruction</div></div>';
 }
 
 function sparkline(data, color) {
   if (!data || data.length < 2) return '';
   const max = Math.max(...data.map(Math.abs), 0.01);
-  const bars = data.map(v => {
-    const h = Math.max(2, Math.abs(v) / max * 36);
-    return `<div class="m-bar" style="height:${h}px;background:${color};opacity:${0.3 + Math.abs(v)/max*0.7}"></div>`;
-  }).join('');
-  return `<div class="m-spark">${bars}</div>`;
+  return '<div class="m-spark">' + data.map(v => {
+    const h = Math.max(2, Math.abs(v) / max * 32);
+    return '<div class="m-bar" style="height:' + h + 'px;background:' + color + ';opacity:' + (0.3 + Math.abs(v)/max*0.7) + '"></div>';
+  }).join('') + '</div>';
 }
 
-// ── TABS ──
+// TABS
 function showTab(name) {
   document.querySelectorAll('.footer-tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase() === name));
   document.querySelectorAll('.footer-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
 }
 
-// ── KEYBOARD NAV ──
+// KEYBOARD + INPUT NAV
 document.addEventListener('keydown', e => {
-  if (e.key === 'ArrowRight' && currentRound < (gameData?.rounds.length || 1)) showRound(currentRound + 1);
-  if (e.key === 'ArrowLeft' && currentRound > 1) showRound(currentRound - 1);
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowRight') showRound(currentRound + 1);
+  if (e.key === 'ArrowLeft') showRound(currentRound - 1);
   if (e.key === ' ') { e.preventDefault(); flipCard('a'); setTimeout(() => flipCard('b'), 200); }
 });
+document.getElementById('round-input').addEventListener('change', function() { showRound(parseInt(this.value) || 1); });
+document.getElementById('round-input').addEventListener('keydown', function(e) { if (e.key === 'Enter') { showRound(parseInt(this.value) || 1); this.blur(); }});
 
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-// ── BOOT ──
 loadData();
 </script>
 </body>
