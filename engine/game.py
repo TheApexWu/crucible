@@ -29,7 +29,7 @@ api_key = os.environ["GEMINI_API_KEY"]
 model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 client = genai.Client(api_key=api_key)
 
-MEMORY_WINDOW = 15
+MEMORY_WINDOW = 5
 MAX_REFLECTION_CHARS = 900
 MAX_MEMORY_ENTRY_CHARS = 500
 

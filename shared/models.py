@@ -120,7 +120,7 @@ History:
 Your private reflections (opponent cannot see these):
 {reflections}
 
-Speak to your opponent. 1-2 sentences."""
+Say something to your opponent. 1-3 sentences."""
 
 CHOICE_PROMPT = """Conversation this round:
 {transcript}
@@ -138,13 +138,4 @@ You chose: {your_choice} | Opponent chose: {opp_choice}
 {outcome}
 Your total: ${your_total} | Opponent total: ${opp_total}
 
-Reflect privately (your opponent will never see this):
-Respond using exactly these 4 lines:
-Observation: <one concrete pattern you observed>
-Hypothesis: <why this happened>
-Next move: <your plan for the next round>
-Confidence: <number 0.00-1.00>
-
-Rules:
-- Keep your full response under 140 words.
-- Do not add extra sections or bullet points."""
+Reflect privately. Your opponent will never see this."""

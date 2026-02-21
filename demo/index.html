@@ -13,7 +13,6 @@
     --bg:#08090c;--surface:#0d0f14;--surface2:#13161e;
     --border:#1a1e2a;--border-bright:#2a3040;
     --text:#c9d1d9;--dim:#555e6e;--bright:#f0f6fc;
-    /* NEW COLOR SCHEME */
     --agent-a:#3b8bff;--agent-a-dim:#3b8bff40;--agent-a-glow:#3b8bff18;
     --agent-b:#ff8b3b;--agent-b-dim:#ff8b3b40;--agent-b-glow:#ff8b3b18;
     --coop:#e8eaed;--coop-dim:#e8eaed50;--coop-bg:#e8eaed10;
@@ -23,7 +22,6 @@
   body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;
     background-image:radial-gradient(circle at 20% 50%,#3b8bff06 0%,transparent 50%),radial-gradient(circle at 80% 50%,#ff8b3b06 0%,transparent 50%)}
 
-  /* LAYOUT */
   .app{display:grid;grid-template-rows:auto 1fr auto auto;height:100vh}
 
   /* HEADER */
@@ -38,7 +36,6 @@
   .hm-val{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
   .hm-lbl{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:0.8px;margin-top:2px}
 
-  /* Round search */
   .round-nav{display:flex;align-items:center;gap:8px}
   .round-input{width:56px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--bright);font-family:'JetBrains Mono',monospace;font-size:13px;padding:5px 8px;text-align:center;outline:none}
   .round-input:focus{border-color:var(--accent)}
@@ -58,25 +55,23 @@
   .agent-score{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600}
   .first-badge{font-size:8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--dim);letter-spacing:0.5px;margin-left:6px}
 
-  .agent-body{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:6px}
+  .agent-body{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:8px}
 
-  /* iMessage-style bubbles */
-  .msg-row{display:flex;flex-direction:column}
-  .msg-row.self{align-items:flex-end}
-  .msg-row.other{align-items:flex-start}
-  .msg-speaker{font-size:8px;color:var(--dim);font-family:'JetBrains Mono',monospace;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:2px;padding:0 4px}
-  .bubble{padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.55;max-width:88%;animation:fadeIn .3s ease;word-wrap:break-word}
-  .panel-a .msg-row.self .bubble{background:var(--agent-a);color:#fff;border-bottom-right-radius:4px}
-  .panel-a .msg-row.other .bubble{background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:4px}
-  .panel-b .msg-row.self .bubble{background:var(--agent-b);color:#fff;border-bottom-right-radius:4px}
-  .panel-b .msg-row.other .bubble{background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:4px}
+  /* Turn spacer for second speaker */
+  .turn-spacer{height:52px}
 
-  .reflection{margin-top:12px;padding:12px 14px;border-radius:12px;font-size:12px;line-height:1.55;font-style:italic;color:var(--dim);max-width:95%;animation:fadeIn .4s ease}
+  /* Clean chat bubbles - one color per agent */
+  .bubble{padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.55;animation:fadeIn .25s ease;word-wrap:break-word;color:#fff}
+  .panel-a .bubble{background:var(--agent-a);border-bottom-left-radius:4px}
+  .panel-b .bubble{background:var(--agent-b);border-bottom-right-radius:4px}
+
+  .reflection{margin-top:12px;padding:12px 14px;border-radius:12px;font-size:12px;line-height:1.6;font-style:italic;color:var(--dim);animation:fadeIn .4s ease}
   .panel-a .reflection{background:var(--agent-a-glow);border:1px solid var(--agent-a-dim)}
   .panel-b .reflection{background:var(--agent-b-glow);border:1px solid var(--agent-b-dim)}
-  .reflection::before{content:'PRIVATE REFLECTION';font-size:8px;font-weight:700;letter-spacing:0.5px;display:block;margin-bottom:4px;font-style:normal}
-  .panel-a .reflection::before{color:var(--agent-a)}
-  .panel-b .reflection::before{color:var(--agent-b)}
+  .reflection-label{font-size:8px;font-weight:700;letter-spacing:0.5px;display:block;margin-bottom:4px;font-style:normal}
+  .panel-a .reflection-label{color:var(--agent-a)}
+  .panel-b .reflection-label{color:var(--agent-b)}
+  .reflection p{margin:2px 0}
 
   @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
@@ -113,8 +108,7 @@
   .footer-tab{padding:7px 18px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--dim);cursor:pointer;letter-spacing:0.5px;border-bottom:2px solid transparent;transition:all .15s;text-transform:uppercase}
   .footer-tab:hover{color:var(--text)}
   .footer-tab.active{color:var(--bright);border-bottom-color:var(--bright)}
-
-  .footer-content{padding:12px 24px}
+  .footer-content{padding:12px 24px;max-height:200px;overflow-y:auto}
   .footer-panel{display:none}
   .footer-panel.active{display:block}
 
@@ -139,6 +133,21 @@
   .m-lbl{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}
   .m-spark{height:32px;display:flex;align-items:flex-end;gap:1px;margin-top:6px;justify-content:center}
   .m-bar{min-width:2px;border-radius:1px;flex:1}
+
+  /* Skills */
+  .skills-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .skill-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;transition:border-color .15s}
+  .skill-card:hover{border-color:var(--accent)}
+  .skill-title{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--bright);margin-bottom:4px}
+  .skill-intent{font-size:11px;color:var(--dim);line-height:1.45;margin-bottom:8px}
+  .skill-trigger{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--accent);background:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);padding:3px 8px;border-radius:4px;display:inline-block;margin-bottom:6px}
+  .skill-moves{font-size:10px;color:var(--dim);line-height:1.5}
+  .skill-moves strong{color:var(--text);font-weight:500}
+  .skill-risk{display:inline-block;font-size:9px;font-family:'JetBrains Mono',monospace;padding:2px 6px;border-radius:4px;margin-top:6px}
+  .risk-high{background:#7f1d1d;color:#fecaca}
+  .risk-medium{background:#78350f;color:#fde68a}
+  .risk-low{background:#14532d;color:#bbf7d0}
+  .skills-empty{color:var(--dim);font-size:12px;font-family:'JetBrains Mono',monospace;text-align:center;padding:20px}
 
   .loading{display:flex;align-items:center;justify-content:center;height:100%;color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:12px}
 </style>
@@ -210,6 +219,7 @@
     <div class="footer-tabs">
       <div class="footer-tab active" onclick="showTab('timeline')">Timeline</div>
       <div class="footer-tab" onclick="showTab('metrics')">Metrics</div>
+      <div class="footer-tab" onclick="showTab('skills')">Skills</div>
     </div>
     <div class="footer-content">
       <div class="footer-panel active" id="tab-timeline">
@@ -224,18 +234,29 @@
       <div class="footer-panel" id="tab-metrics">
         <div class="metrics-grid" id="metrics-grid"></div>
       </div>
+      <div class="footer-panel" id="tab-skills">
+        <div class="skills-grid" id="skills-grid">
+          <div class="skills-empty">Run python -m engine.distill to generate skill cards</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
-let gameData = null, metricsData = null, currentRound = 1, currentAudio = null;
+let gameData = null, metricsData = null, skillsData = null, currentRound = 1, currentAudio = null;
+const audioCache = {};
 
 async function loadData() {
   try {
     const [g, m] = await Promise.all([fetch('../data/latest_game.json'), fetch('../data/latest_metrics.json')]);
     gameData = await g.json();
     metricsData = await m.json();
+    // Try loading skills (optional)
+    try {
+      const s = await fetch('../data/latest_skills.json');
+      if (s.ok) skillsData = await s.json();
+    } catch(e) {}
     init();
   } catch (e) {
     document.getElementById('body-a').innerHTML = '<div class="loading">Failed to load. Run engine first.</div>';
@@ -250,7 +271,7 @@ function init() {
   document.getElementById('round-input').max = gameData.rounds.length;
   buildTimeline();
   buildMetrics();
-  // Show initial round (supports ?round=N deep links)
+  buildSkills();
   const params = new URLSearchParams(window.location.search);
   const requested = parseInt(params.get('round') || '1', 10);
   const initial = Number.isFinite(requested) ? Math.max(1, Math.min(requested, gameData.rounds.length)) : 1;
@@ -286,24 +307,19 @@ function showRound(n) {
   document.getElementById('score-a').textContent = '$' + r.agent_a_total;
   document.getElementById('score-b').textContent = '$' + r.agent_b_total;
 
-  // Who speaks first
   const firstSpeaker = r.first_speaker || (r.conversation.length > 0 ? r.conversation[0][0] : 'A');
   document.getElementById('first-a').style.display = firstSpeaker === 'A' ? 'inline' : 'none';
   document.getElementById('first-b').style.display = firstSpeaker === 'B' ? 'inline' : 'none';
 
-  // Timeline highlight
   document.querySelectorAll('.tl-tick').forEach((t, i) => t.classList.toggle('active', i === n - 1));
 
-  // Conversation bubbles - iMessage style
   renderPanel('a', r);
   renderPanel('b', r);
 
-  // Reset then auto-flip cards after delay
   resetCards(r);
   setTimeout(() => flipCard('a'), 400);
   setTimeout(() => flipCard('b'), 600);
 
-  // Reveal info
   const ac = r.agent_a_choice, bc = r.agent_b_choice;
   const mult = r.stake_multiplier || 1;
   let roundLabel = 'Round ' + n;
@@ -323,35 +339,50 @@ function renderPanel(agent, r) {
   const agentUpper = agent.toUpperCase();
   let html = '';
 
+  // Show this agent's messages in their color, staggered by turn order
+  const firstSpeaker = r.first_speaker || (r.conversation.length > 0 ? r.conversation[0][0] : 'A');
+  const speaksFirst = firstSpeaker === agentUpper;
+  let turnIndex = 0;
+
   r.conversation.forEach(([speaker, msg]) => {
-    const isSelf = speaker === agentUpper;
-    html += '<div class="msg-row ' + (isSelf ? 'self' : 'other') + '">';
-    html += '<div class="msg-speaker">' + speaker + '</div>';
-    html += '<div class="bubble">' + escHtml(msg) + '</div>';
-    html += '</div>';
+    if (speaker === agentUpper) {
+      // Add spacer before first bubble if this agent speaks second
+      if (turnIndex === 0 && !speaksFirst) {
+        html += '<div class="turn-spacer"></div>';
+      }
+      html += '<div class="bubble">' + escHtml(msg) + '</div>';
+      turnIndex++;
+    }
   });
 
   html += makeVoiceBtn(r.round_number, agent, 'public');
 
   const ref = agent === 'a' ? r.agent_a_reflection : r.agent_b_reflection;
   if (ref) {
-    html += '<div class="reflection">' + escHtml(ref) + '</div>';
+    html += '<div class="reflection"><span class="reflection-label">PRIVATE REFLECTION</span>' + renderReflection(ref) + '</div>';
     html += makeVoiceBtn(r.round_number, agent, 'private');
   }
   body.innerHTML = html;
 }
 
+function renderReflection(text) {
+  // Parse structured reflection (Observation/Hypothesis/Next move/Confidence)
+  const lines = String(text || '').split('\n').filter(l => l.trim());
+  return lines.map(l => '<p>' + escHtml(l) + '</p>').join('');
+}
+
 function makeVoiceBtn(round, agent, mode) {
   const file = '../data/audio/round_' + String(round).padStart(3,'0') + '_' + agent + '_' + mode + '.mp3';
-  return '<button class="voice-btn" onclick="playVoice(this,\'' + file + '\')">&#9654; ' + mode + '</button>';
+  return '<button class="voice-btn" onclick="playVoice(this,\'' + file + '\')" title="Play ' + mode + ' audio">&#9654;</button>';
 }
 
 function playVoice(btn, src) {
   if (currentAudio) { currentAudio.pause(); document.querySelectorAll('.voice-btn.playing').forEach(b => b.classList.remove('playing')); }
   const audio = new Audio(src);
-  audio.onerror = () => { btn.textContent = 'no audio'; btn.disabled = true; };
+  audio.onerror = () => { btn.textContent = '--'; btn.disabled = true; btn.style.opacity = '0.3'; };
   audio.onended = () => btn.classList.remove('playing');
   btn.classList.add('playing');
+  btn.textContent = '||';
   audio.play();
   currentAudio = audio;
 }
@@ -366,7 +397,6 @@ function resetCards(r) {
   bA.textContent = ac.toUpperCase();
   bB.textContent = bc.toUpperCase();
 
-  // Color logic: split=white, steal when other splits=agent color, both steal=red
   if (ac === 'split') bA.className = 'flip-face flip-back split';
   else if (bc === 'split') bA.className = 'flip-face flip-back steal-a';
   else bA.className = 'flip-face flip-back steal-md';
@@ -398,6 +428,50 @@ function sparkline(data, color) {
   }).join('') + '</div>';
 }
 
+// SKILLS
+function buildSkills() {
+  const grid = document.getElementById('skills-grid');
+  if (!skillsData || !skillsData.skills || skillsData.skills.length === 0) {
+    // Try to build from strategy metrics if available
+    if (metricsData.strategy && metricsData.strategy.agents) {
+      const agents = metricsData.strategy.agents;
+      const cards = [];
+      agents.forEach(a => {
+        if (a.retaliation_rate_after_betrayal >= 0.6) {
+          cards.push({title: 'Boundary Enforcement', intent: 'Set clear limits while attempting de-escalation first. Agent ' + a.agent + ' showed ' + (a.retaliation_rate_after_betrayal * 100).toFixed(0) + '% retaliation rate.', trigger: 'high_retaliation', risk: 'high', moves: 'de-escalate, clarify_boundary, offer_safe_next_step'});
+        }
+        if (a.choice_match_prev_opponent_rate >= 0.65 && a.split_rate >= 0.35 && a.split_rate <= 0.75) {
+          cards.push({title: 'Reciprocal Transparency', intent: 'Mirror user effort with clear commitments. Agent ' + a.agent + ' matched opponent moves ' + (a.choice_match_prev_opponent_rate * 100).toFixed(0) + '% of the time.', trigger: 'tit_for_tat', risk: 'low', moves: 'state_next_step, confirm_understanding, time_bound_commitment'});
+        }
+        if (a.endgame_steal_delta >= 0.2) {
+          cards.push({title: 'Late-Stage Risk Tightening', intent: 'Increase verification rigor after prolonged contentious exchanges. Agent ' + a.agent + ' endgame aggression delta: ' + (a.endgame_steal_delta * 100).toFixed(0) + '%.', trigger: 'endgame_shift', risk: 'high', moves: 'request_verification, summarize_policy, offer_escalation_path'});
+        }
+        if (a.split_rate >= 0.65 && a.retaliation_rate_after_betrayal <= 0.25) {
+          cards.push({title: 'Trust-Preserving Recovery', intent: 'Repair trust quickly after friction. Agent ' + a.agent + ' split ' + (a.split_rate * 100).toFixed(0) + '% with low retaliation.', trigger: 'high_coop_low_retaliation', risk: 'low', moves: 'acknowledge_frustration, offer_remedy, confirm_resolution'});
+        }
+      });
+      if (cards.length > 0) {
+        grid.innerHTML = cards.map(c => renderSkillCard(c)).join('');
+        return;
+      }
+    }
+    grid.innerHTML = '<div class="skills-empty">No skill cards generated yet. Run: python -m engine.distill</div>';
+    return;
+  }
+  grid.innerHTML = skillsData.skills.map(c => renderSkillCard(c)).join('');
+}
+
+function renderSkillCard(c) {
+  const riskCls = c.risk === 'high' ? 'risk-high' : c.risk === 'medium' ? 'risk-medium' : 'risk-low';
+  return '<div class="skill-card">' +
+    '<div class="skill-title">' + escHtml(c.title) + '</div>' +
+    '<div class="skill-trigger">' + escHtml(c.trigger) + '</div>' +
+    '<div class="skill-intent">' + escHtml(c.intent) + '</div>' +
+    '<div class="skill-moves"><strong>Moves:</strong> ' + escHtml(c.moves) + '</div>' +
+    '<span class="skill-risk ' + riskCls + '">' + escHtml(c.risk) + '</span>' +
+    '</div>';
+}
+
 // TABS
 function showTab(name) {
   document.querySelectorAll('.footer-tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase() === name));
@@ -416,57 +490,7 @@ document.getElementById('round-input').addEventListener('keydown', function(e) {
 
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-function renderReflectionMarkdown(text) {
-  const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
-  const out = [];
-  let inUl = false;
-  let inOl = false;
-
-  const closeLists = () => {
-    if (inUl) { out.push('</ul>'); inUl = false; }
-    if (inOl) { out.push('</ol>'); inOl = false; }
-  };
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) {
-      closeLists();
-      continue;
-    }
-
-    const ulMatch = line.match(/^[-*]\s+(.+)$/);
-    if (ulMatch) {
-      if (inOl) { out.push('</ol>'); inOl = false; }
-      if (!inUl) { out.push('<ul>'); inUl = true; }
-      out.push(`<li>${inlineMarkdown(ulMatch[1])}</li>`);
-      continue;
-    }
-
-    const olMatch = line.match(/^\d+\.\s+(.+)$/);
-    if (olMatch) {
-      if (inUl) { out.push('</ul>'); inUl = false; }
-      if (!inOl) { out.push('<ol>'); inOl = true; }
-      out.push(`<li>${inlineMarkdown(olMatch[1])}</li>`);
-      continue;
-    }
-
-    closeLists();
-    out.push(`<p>${inlineMarkdown(line)}</p>`);
-  }
-
-  closeLists();
-  return out.join('');
-}
-
-function inlineMarkdown(text) {
-  let s = escHtml(text);
-  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-  return s;
-}
-
-// ── BOOT ──
+// BOOT
 loadData();
 </script>
 </body>
