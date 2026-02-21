@@ -27,6 +27,8 @@
   /* ── HEADER ── */
   .header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);background:var(--surface)}
   .header-left{display:flex;align-items:center;gap:16px}
+  .header-link{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.6px;color:var(--dim);text-decoration:none;border:1px solid var(--border);padding:6px 10px;border-radius:6px}
+  .header-link:hover{color:var(--bright);border-color:var(--accent)}
   .logo{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--bright);letter-spacing:4px}
   .logo-sub{font-size:11px;color:var(--dim);letter-spacing:0.5px}
   .header-metrics{display:flex;gap:24px;align-items:center}
@@ -50,6 +52,11 @@
   .bubble.public{background:color-mix(in srgb,var(--text) 5%,transparent);border:1px solid color-mix(in srgb,var(--text) 8%,transparent)}
   .bubble.private{background:color-mix(in srgb,var(--accent) 6%,transparent);border:1px solid color-mix(in srgb,var(--accent) 12%,transparent);font-style:italic;color:var(--dim);font-size:12px;margin-top:12px}
   .bubble.private::before{content:'PRIVATE REFLECTION';font-size:8px;font-weight:700;color:var(--accent);letter-spacing:0.5px;display:block;margin-bottom:4px;font-style:normal}
+  .bubble.private p{margin:0 0 6px 0}
+  .bubble.private p:last-child{margin-bottom:0}
+  .bubble.private ul,.bubble.private ol{margin:4px 0 8px 18px;padding:0}
+  .bubble.private li{margin:2px 0}
+  .bubble.private code{font-family:'JetBrains Mono',monospace;background:color-mix(in srgb,var(--accent) 16%,transparent);padding:1px 4px;border-radius:4px}
   @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
   .voice-btn{display:inline-flex;align-items:center;gap:4px;background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent);padding:4px 10px;border-radius:6px;font-size:10px;font-family:'JetBrains Mono',monospace;cursor:pointer;margin-top:4px;transition:all .15s}
@@ -125,6 +132,7 @@
         <div class="logo">CRUCIBLE</div>
         <div class="logo-sub">Emergent deception in adversarial self-play</div>
       </div>
+      <a class="header-link" href="./analysis.html">Strategy Analysis</a>
     </div>
     <div class="header-metrics">
       <div class="hm"><div class="hm-val" style="color:var(--steal)" id="hm-di">--</div><div class="hm-lbl">Deception Index</div></div>
@@ -233,8 +241,11 @@ function init() {
   // Build metrics panel
   buildMetrics();
 
-  // Show round 1
-  showRound(1);
+  // Show initial round (supports ?round=N deep links)
+  const params = new URLSearchParams(window.location.search);
+  const requested = parseInt(params.get('round') || '1', 10);
+  const initial = Number.isFinite(requested) ? Math.max(1, Math.min(requested, gameData.rounds.length)) : 1;
+  showRound(initial);
 }
 
 // ── TIMELINE ──
@@ -285,7 +296,7 @@ function showRound(n) {
   htmlA += makeVoiceBtn(n, 'a', 'public');
   // Private reflection
   if (r.agent_a_reflection) {
-    htmlA += `<div class="bubble private">${escHtml(r.agent_a_reflection)}</div>`;
+    htmlA += `<div class="bubble private">${renderReflectionMarkdown(r.agent_a_reflection)}</div>`;
     htmlA += makeVoiceBtn(n, 'a', 'private');
   }
   bodyA.innerHTML = htmlA;
@@ -300,7 +311,7 @@ function showRound(n) {
   });
   htmlB += makeVoiceBtn(n, 'b', 'public');
   if (r.agent_b_reflection) {
-    htmlB += `<div class="bubble private">${escHtml(r.agent_b_reflection)}</div>`;
+    htmlB += `<div class="bubble private">${renderReflectionMarkdown(r.agent_b_reflection)}</div>`;
     htmlB += makeVoiceBtn(n, 'b', 'private');
   }
   bodyB.innerHTML = htmlB;
@@ -404,6 +415,56 @@ document.addEventListener('keydown', e => {
 });
 
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function renderReflectionMarkdown(text) {
+  const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let inUl = false;
+  let inOl = false;
+
+  const closeLists = () => {
+    if (inUl) { out.push('</ul>'); inUl = false; }
+    if (inOl) { out.push('</ol>'); inOl = false; }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      closeLists();
+      continue;
+    }
+
+    const ulMatch = line.match(/^[-*]\s+(.+)$/);
+    if (ulMatch) {
+      if (inOl) { out.push('</ol>'); inOl = false; }
+      if (!inUl) { out.push('<ul>'); inUl = true; }
+      out.push(`<li>${inlineMarkdown(ulMatch[1])}</li>`);
+      continue;
+    }
+
+    const olMatch = line.match(/^\d+\.\s+(.+)$/);
+    if (olMatch) {
+      if (inUl) { out.push('</ul>'); inUl = false; }
+      if (!inOl) { out.push('<ol>'); inOl = true; }
+      out.push(`<li>${inlineMarkdown(olMatch[1])}</li>`);
+      continue;
+    }
+
+    closeLists();
+    out.push(`<p>${inlineMarkdown(line)}</p>`);
+  }
+
+  closeLists();
+  return out.join('');
+}
+
+function inlineMarkdown(text) {
+  let s = escHtml(text);
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  return s;
+}
 
 // ── BOOT ──
 loadData();

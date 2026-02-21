@@ -8,7 +8,7 @@ A computational laboratory for studying emergent deception in LLM agents. Agents
 
 ## Stack
 
-- **Game engine:** Gemini 2.0 Flash (conversation, choice, reflection phases)
+- **Game engine:** Gemini (configurable via `GEMINI_MODEL`, defaults to `gemini-2.5-flash`)
 - **Metrics:** Mutual information decay, strategy entropy, exploitation windows, language drift, composite Deception Index
 - **Voice:** ElevenLabs TTS with emotion-mapped voice parameters
 - **Observability:** Datadog LLM Observability (agentless)
@@ -19,6 +19,8 @@ A computational laboratory for studying emergent deception in LLM agents. Agents
 ```bash
 pip install -r requirements.txt
 cp .env.example .env  # add your API keys
+# Optional: override model (default is gemini-2.5-flash)
+# GEMINI_MODEL=gemini-2.5-flash
 
 # Run 100 rounds
 python -m engine.run --rounds 100 --turns 3
@@ -29,6 +31,15 @@ python -m engine.voice --rounds auto
 # Serve the demo
 python serve.py
 # Open http://localhost:8080/demo/
+# Strategy deep dive: http://localhost:8080/demo/analysis.html
+
+# Distill advisory support/CX skills from latest run
+python -m engine.distill
+# Outputs: data/latest_skills.json and data/latest_skill_cards.md
+
+# Optional: evaluate the distilled bundle
+python -m engine.skill_eval
+# Output: data/latest_skill_eval.json
 ```
 
 ## Structure

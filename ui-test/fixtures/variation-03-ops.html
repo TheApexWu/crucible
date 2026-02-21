@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRUCIBLE EnneaFlow Ops</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;900&family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./enneaflow.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="logo"><span class="logo-mark">C</span> CRUCIBLE</div>
+      <nav class="nav-links"><a href="#">Replay</a><a href="#">Datadog</a><a href="#">Incidents</a></nav>
+      <button class="start-btn">Start Free</button>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <div class="label">Observability</div>
+          <h1>Monitor Deception As It Emerges.</h1>
+          <p>Operations variation with routing, thresholds, and LLM telemetry focus for hackathon demo loops.</p>
+
+          <div class="ennea-line">
+            <article class="ennea-item"><div class="ennea-icon">M1</div><div><strong>Index Watch</strong><p>Alert when Deception Index exceeds threshold.</p></div></article>
+            <article class="ennea-item"><div class="ennea-icon">M2</div><div><strong>Entropy Drift</strong><p>Track strategy randomness over windows.</p></div></article>
+            <article class="ennea-item"><div class="ennea-icon">M3</div><div><strong>Retaliation Lag</strong><p>Detect adaptation speed degradation.</p></div></article>
+          </div>
+
+          <button class="cta" id="toggle-alert">BEGIN ASSESSMENT <span class="arrow">-></span></button>
+        </div>
+
+        <div class="hero-visual">
+          <div class="ghost-square"></div>
+          <div class="hero-square"><span>⬢</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Alert State</h3>
+        <p id="alert-state">Status: Passive Monitoring</p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div><h3>CRUCIBLE</h3><p>Datadog-linked behavior observability.</p></div>
+      <div><h3>Platform</h3><a href="#">LLM Obs</a><a href="#">Traces</a></div>
+      <div><h3>Runbook</h3><a href="#">Thresholds</a><a href="#">Escalation</a></div>
+      <div><h3>Social</h3><span class="social">X</span><span class="social">GH</span></div>
+    </footer>
+  </div>
+
+  <script>
+    let active = false;
+    const state = document.getElementById('alert-state');
+    document.getElementById('toggle-alert').addEventListener('click', () => {
+      active = !active;
+      state.textContent = active ? 'Status: Active Alerting (DI > 70)' : 'Status: Passive Monitoring';
+    });
+  </script>
+</body>
+</html>
