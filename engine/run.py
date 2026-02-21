@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from engine.game import run_game
 from engine.metrics import compute_all_metrics
-from engine.instrumentation import init_all
+from engine.instrumentation import init_all, bt_log_round
 
 
 def on_round_complete(round_state):
@@ -67,6 +67,10 @@ async def main():
         f.write(game_state.model_dump_json(indent=2))
     with open("data/latest_metrics.json", "w") as f:
         f.write(metrics.model_dump_json(indent=2))
+
+    # Log rounds to Braintrust
+    for r, m in zip(game_state.rounds, metrics.rounds):
+        bt_log_round(r, m)
 
     print(f"\nDeception Index: {metrics.deception_index:.1f}")
     print(f"Cooperation Rate: {metrics.cooperation_rate:.1%}")
