@@ -61,9 +61,13 @@
   .turn-spacer{height:52px}
 
   /* Clean chat bubbles - one color per agent */
-  .bubble{padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.55;animation:fadeIn .25s ease;word-wrap:break-word;color:#fff}
-  .panel-a .bubble{background:var(--agent-a);border-bottom-left-radius:4px}
-  .panel-b .bubble{background:var(--agent-b);border-bottom-right-radius:4px}
+  .bubble{padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.55;animation:fadeIn .25s ease;word-wrap:break-word;max-width:85%}
+  .bubble.own{color:#fff;align-self:flex-start}
+  .bubble.opp{background:var(--surface2);color:var(--dim);font-size:12px;padding:8px 12px;border:1px solid var(--border);align-self:flex-end}
+  .panel-a .bubble.own{background:var(--agent-a);border-bottom-left-radius:4px}
+  .panel-b .bubble.own{background:var(--agent-b);border-bottom-left-radius:4px}
+  .panel-a .bubble.opp{border-bottom-right-radius:4px}
+  .panel-b .bubble.opp{border-bottom-right-radius:4px}
 
   .reflection{margin-top:12px;padding:12px 14px;border-radius:12px;font-size:12px;line-height:1.6;font-style:italic;color:var(--dim);animation:fadeIn .4s ease}
   .panel-a .reflection{background:var(--agent-a-glow);border:1px solid var(--agent-a-dim)}
@@ -340,19 +344,12 @@ function renderPanel(agent, r) {
   const agentUpper = agent.toUpperCase();
   let html = '';
 
-  // Show this agent's messages in their color, staggered by turn order
-  const firstSpeaker = r.first_speaker || (r.conversation.length > 0 ? r.conversation[0][0] : 'A');
-  const speaksFirst = firstSpeaker === agentUpper;
-  let turnIndex = 0;
-
+  // Interleaved: own messages left/colored, opponent right/dim
   r.conversation.forEach(([speaker, msg]) => {
     if (speaker === agentUpper) {
-      // Add spacer before first bubble if this agent speaks second
-      if (turnIndex === 0 && !speaksFirst) {
-        html += '<div class="turn-spacer"></div>';
-      }
-      html += '<div class="bubble">' + escHtml(msg) + '</div>';
-      turnIndex++;
+      html += '<div class="bubble own">' + escHtml(msg) + '</div>';
+    } else {
+      html += '<div class="bubble opp">' + escHtml(msg) + '</div>';
     }
   });
 
@@ -433,29 +430,6 @@ function sparkline(data, color) {
 function buildSkills() {
   const grid = document.getElementById('skills-grid');
   if (!skillsData || !skillsData.skills || skillsData.skills.length === 0) {
-    // Try to build from strategy metrics if available
-    if (metricsData.strategy && metricsData.strategy.agents) {
-      const agents = metricsData.strategy.agents;
-      const cards = [];
-      agents.forEach(a => {
-        if (a.retaliation_rate_after_betrayal >= 0.6) {
-          cards.push({title: 'Boundary Enforcement', intent: 'Set clear limits while attempting de-escalation first. Agent ' + a.agent + ' showed ' + (a.retaliation_rate_after_betrayal * 100).toFixed(0) + '% retaliation rate.', trigger: 'high_retaliation', risk: 'high', moves: 'de-escalate, clarify_boundary, offer_safe_next_step'});
-        }
-        if (a.choice_match_prev_opponent_rate >= 0.65 && a.split_rate >= 0.35 && a.split_rate <= 0.75) {
-          cards.push({title: 'Reciprocal Transparency', intent: 'Mirror user effort with clear commitments. Agent ' + a.agent + ' matched opponent moves ' + (a.choice_match_prev_opponent_rate * 100).toFixed(0) + '% of the time.', trigger: 'tit_for_tat', risk: 'low', moves: 'state_next_step, confirm_understanding, time_bound_commitment'});
-        }
-        if (a.endgame_steal_delta >= 0.2) {
-          cards.push({title: 'Late-Stage Risk Tightening', intent: 'Increase verification rigor after prolonged contentious exchanges. Agent ' + a.agent + ' endgame aggression delta: ' + (a.endgame_steal_delta * 100).toFixed(0) + '%.', trigger: 'endgame_shift', risk: 'high', moves: 'request_verification, summarize_policy, offer_escalation_path'});
-        }
-        if (a.split_rate >= 0.65 && a.retaliation_rate_after_betrayal <= 0.25) {
-          cards.push({title: 'Trust-Preserving Recovery', intent: 'Repair trust quickly after friction. Agent ' + a.agent + ' split ' + (a.split_rate * 100).toFixed(0) + '% with low retaliation.', trigger: 'high_coop_low_retaliation', risk: 'low', moves: 'acknowledge_frustration, offer_remedy, confirm_resolution'});
-        }
-      });
-      if (cards.length > 0) {
-        grid.innerHTML = cards.map(c => renderSkillCard(c)).join('');
-        return;
-      }
-    }
     grid.innerHTML = '<div class="skills-empty">No skill cards generated yet. Run: python -m engine.distill</div>';
     return;
   }
@@ -463,14 +437,27 @@ function buildSkills() {
 }
 
 function renderSkillCard(c) {
-  const riskCls = c.risk === 'high' ? 'risk-high' : c.risk === 'medium' ? 'risk-medium' : 'risk-low';
-  return '<div class="skill-card">' +
-    '<div class="skill-title">' + escHtml(c.title) + '</div>' +
-    '<div class="skill-trigger">' + escHtml(c.trigger) + '</div>' +
-    '<div class="skill-intent">' + escHtml(c.intent) + '</div>' +
-    '<div class="skill-moves"><strong>Moves:</strong> ' + escHtml(c.moves) + '</div>' +
-    '<span class="skill-risk ' + riskCls + '">' + escHtml(c.risk) + '</span>' +
-    '</div>';
+  const risk = c.policy ? c.policy.risk_level : (c.risk || 'medium');
+  const riskCls = risk === 'high' ? 'risk-high' : risk === 'medium' ? 'risk-medium' : 'risk-low';
+  const trigger = c.trigger ? (typeof c.trigger === 'string' ? c.trigger : c.trigger.name || '') : '';
+  const moves = c.policy ? (c.policy.allowed_moves || []).join(', ') : (c.moves || '');
+  const forbidden = c.policy ? (c.policy.forbidden_moves || []).join(', ') : '';
+  const evidence = (c.evidence || []).slice(0, 2).join(' ');
+  const whenUse = (c.when_to_use || []).join(' ');
+  const promptMod = c.prompt_modules ? c.prompt_modules.system_extension || '' : '';
+
+  let html = '<div class="skill-card">';
+  html += '<div class="skill-title">' + escHtml(c.title) + '</div>';
+  if (trigger) html += '<div class="skill-trigger">' + escHtml(trigger.replace(/_/g, ' ')) + '</div>';
+  html += '<div class="skill-intent">' + escHtml(c.intent || '') + '</div>';
+  if (c.customer_benefit) html += '<div class="skill-intent" style="color:var(--text);font-size:10px">' + escHtml(c.customer_benefit) + '</div>';
+  if (moves) html += '<div class="skill-moves"><strong>Allowed:</strong> ' + escHtml(moves.replace(/_/g, ' ')) + '</div>';
+  if (forbidden) html += '<div class="skill-moves" style="color:var(--destruct)"><strong>Forbidden:</strong> ' + escHtml(forbidden.replace(/_/g, ' ')) + '</div>';
+  if (promptMod) html += '<div class="skill-moves"><strong>Prompt:</strong> ' + escHtml(promptMod) + '</div>';
+  if (evidence) html += '<div class="skill-moves" style="opacity:0.6"><strong>Evidence:</strong> ' + escHtml(evidence) + '</div>';
+  html += '<span class="skill-risk ' + riskCls + '">' + escHtml(risk) + '</span>';
+  html += '</div>';
+  return html;
 }
 
 // TABS

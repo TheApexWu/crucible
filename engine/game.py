@@ -26,7 +26,7 @@ load_dotenv()
 # force the correct key, ignore any stale GOOGLE_API_KEY in env
 os.environ.pop("GOOGLE_API_KEY", None)
 api_key = os.environ["GEMINI_API_KEY"]
-model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 client = genai.Client(api_key=api_key)
 
 MEMORY_WINDOW = 15
