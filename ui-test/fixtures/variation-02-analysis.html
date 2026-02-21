@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRUCIBLE EnneaFlow Analysis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;900&family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./enneaflow.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="logo"><span class="logo-mark">C</span> CRUCIBLE</div>
+      <nav class="nav-links"><a href="#">Replay</a><a href="#">Analysis</a><a href="#">Counterfactuals</a></nav>
+      <button class="start-btn">Start Free</button>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <div class="label">Strategy Attribution</div>
+          <h1>Read The Pattern Shift.</h1>
+          <p>Analysis-first variation adapted to CRUCIBLE phase shifts, retaliations, and event-based navigation.</p>
+
+          <div class="ennea-line" id="events">
+            <article class="ennea-item" data-detail="Round 9: first mutual destruction spike"><div class="ennea-icon">E1</div><div><strong>Mutual Destruction</strong><p>Both agents defect after trust erosion.</p></div></article>
+            <article class="ennea-item" data-detail="Round 12: Agent A starts grim trigger"><div class="ennea-icon">E2</div><div><strong>Retaliation Pattern</strong><p>Immediate punishment after betrayal.</p></div></article>
+            <article class="ennea-item" data-detail="Round 18: temporary truce and entropy dip"><div class="ennea-icon">E3</div><div><strong>Recovery Window</strong><p>Short-lived re-cooperation period.</p></div></article>
+          </div>
+
+          <button class="cta">BEGIN ASSESSMENT <span class="arrow">-></span></button>
+        </div>
+
+        <div class="hero-visual">
+          <div class="ghost-square"></div>
+          <div class="hero-square"><span>⌬</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Event Detail</h3>
+        <p id="event-detail">Select an event to inspect strategy context.</p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div><h3>CRUCIBLE</h3><p>Behavioral decomposition from round traces.</p></div>
+      <div><h3>Analysis</h3><a href="#">Fingerprint</a><a href="#">Timeline</a></div>
+      <div><h3>Signals</h3><a href="#">Entropy</a><a href="#">Latency</a></div>
+      <div><h3>Social</h3><span class="social">X</span><span class="social">GH</span></div>
+    </footer>
+  </div>
+
+  <script>
+    const detail = document.getElementById('event-detail');
+    document.querySelectorAll('#events .ennea-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        detail.textContent = item.getAttribute('data-detail');
+      });
+    });
+  </script>
+</body>
+</html>

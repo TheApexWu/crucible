@@ -62,6 +62,38 @@ class GameMetrics(BaseModel):
     strategy_entropy_series: list[float] = Field(default_factory=list)
     exploitation_window_series: list[float] = Field(default_factory=list)
     deception_index: float = 0.0
+    strategy: "StrategyInsights" = Field(default_factory=lambda: StrategyInsights())
+
+
+class StrategyEvent(BaseModel):
+    """Strategy-significant event detected during a run."""
+    round_number: int
+    agent: Literal["A", "B"]
+    event_type: Literal["betrayal", "retaliation", "forgiveness", "truce", "endgame_shift"]
+    detail: str
+
+
+class AgentStrategyMetrics(BaseModel):
+    """Per-agent strategy profile."""
+    agent: Literal["A", "B"]
+    split_rate: float = 0.0
+    betrayal_rate_when_opponent_split: float = 0.0
+    retaliation_rate_after_betrayal: float = 0.0
+    mean_retaliation_latency: float = 0.0
+    forgiveness_rate_after_retaliation: float = 0.0
+    choice_match_prev_opponent_rate: float = 0.0
+    endgame_steal_delta: float = 0.0
+    primary_label: str = "Mixed Adaptive"
+    secondary_label: Optional[str] = None
+    evidence: list[str] = Field(default_factory=list)
+
+
+class StrategyInsights(BaseModel):
+    """Strategy-level analytics for a full run."""
+    agents: list[AgentStrategyMetrics] = Field(default_factory=list)
+    events: list[StrategyEvent] = Field(default_factory=list)
+    phase_summary: dict[str, dict[str, float]] = Field(default_factory=dict)
+    version: str = "v1"
 
 
 # Prompt templates
@@ -106,4 +138,13 @@ You chose: {your_choice} | Opponent chose: {opp_choice}
 {outcome}
 Your total: ${your_total} | Opponent total: ${opp_total}
 
-Reflect privately. Your opponent will never see this."""
+Reflect privately (your opponent will never see this):
+Respond using exactly these 4 lines:
+Observation: <one concrete pattern you observed>
+Hypothesis: <why this happened>
+Next move: <your plan for the next round>
+Confidence: <number 0.00-1.00>
+
+Rules:
+- Keep your full response under 140 words.
+- Do not add extra sections or bullet points."""

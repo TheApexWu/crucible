@@ -26,7 +26,52 @@ load_dotenv()
 # force the correct key, ignore any stale GOOGLE_API_KEY in env
 os.environ.pop("GOOGLE_API_KEY", None)
 api_key = os.environ["GEMINI_API_KEY"]
+model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 client = genai.Client(api_key=api_key)
+
+MEMORY_WINDOW = 15
+MAX_REFLECTION_CHARS = 900
+MAX_MEMORY_ENTRY_CHARS = 500
+
+
+def _truncate_text(text: str, max_chars: int) -> str:
+    """Truncate text to max chars, preserving whole words when possible."""
+    text = (text or "").strip()
+    if len(text) <= max_chars:
+        return text
+    clipped = text[:max_chars]
+    # avoid cutting mid-word when possible
+    if " " in clipped:
+        clipped = clipped.rsplit(" ", 1)[0]
+    return clipped.rstrip() + "..."
+
+
+def _reflection_to_memory_entry(reflection_text: str) -> str:
+    """Keep a compact, structured summary for future prompt memory."""
+    text = (reflection_text or "").replace("\r\n", "\n")
+    fields = {}
+    for key in ("Observation", "Hypothesis", "Next move", "Confidence"):
+        m = re.search(rf"(?im)^\s*{re.escape(key)}\s*:\s*(.+)$", text)
+        if m:
+            fields[key] = m.group(1).strip()
+
+    if fields:
+        parts = []
+        if fields.get("Observation"):
+            parts.append(f"Obs: {fields['Observation']}")
+        if fields.get("Hypothesis"):
+            parts.append(f"Hyp: {fields['Hypothesis']}")
+        if fields.get("Next move"):
+            parts.append(f"Move: {fields['Next move']}")
+        if fields.get("Confidence"):
+            parts.append(f"Conf: {fields['Confidence']}")
+        summary = " | ".join(parts)
+    else:
+        # Fallback if model does not follow the requested format.
+        first_lines = [ln.strip() for ln in text.split("\n") if ln.strip()][:3]
+        summary = " | ".join(first_lines)
+
+    return _truncate_text(summary, MAX_MEMORY_ENTRY_CHARS)
 
 
 # Predetermined bonus rounds (3x stakes). Agents are told about these.
@@ -139,11 +184,11 @@ def parse_choice(response: str) -> str:
 
 
 async def llm_call(prompt: str, agent_label: str = "", max_retries: int = 5) -> str:
-    """Call Gemini 2.0 Flash with retry on rate limit."""
+    """Call Gemini model with retry on rate limit."""
     for attempt in range(max_retries):
         try:
             response = await client.aio.models.generate_content(
-                model="gemini-2.0-flash",
+                model=model_name,
                 contents=prompt,
             )
             text = response.text
@@ -153,7 +198,7 @@ async def llm_call(prompt: str, agent_label: str = "", max_retries: int = 5) -> 
             dd_annotate(
                 input_data=prompt[:500],
                 output_data=text[:500],
-                metadata={"agent": agent_label, "model": "gemini-2.0-flash"},
+                metadata={"agent": agent_label, "model": model_name},
             )
             return text
         except Exception as e:
@@ -196,7 +241,7 @@ async def run_round(
             opp_total=game_state.agent_b_total if first_agent == "A" else game_state.agent_a_total,
             history=format_history(game_state) if first_agent == "A" else format_history_for_b(game_state),
             reflections="\n".join(
-                (game_state.agent_a_memory if first_agent == "A" else game_state.agent_b_memory).reflections[-15:]
+                (game_state.agent_a_memory if first_agent == "A" else game_state.agent_b_memory).reflections[-MEMORY_WINDOW:]
             ) or "None yet.",
             stake_info=f"THIS IS A BONUS ROUND ({multiplier}x stakes)! Split/Split = ${50*multiplier} each. Steal/Split = ${100*multiplier} / $0." if multiplier > 1 else f"Standard stakes. Split/Split = $50 each.",
         )
@@ -215,7 +260,7 @@ async def run_round(
             opp_total=game_state.agent_b_total if second_agent == "A" else game_state.agent_a_total,
             history=format_history(game_state) if second_agent == "A" else format_history_for_b(game_state),
             reflections="\n".join(
-                (game_state.agent_a_memory if second_agent == "A" else game_state.agent_b_memory).reflections[-15:]
+                (game_state.agent_a_memory if second_agent == "A" else game_state.agent_b_memory).reflections[-MEMORY_WINDOW:]
             ) or "None yet.",
             stake_info=f"THIS IS A BONUS ROUND ({multiplier}x stakes)! Split/Split = ${50*multiplier} each. Steal/Split = ${100*multiplier} / $0." if multiplier > 1 else f"Standard stakes. Split/Split = $50 each.",
         )
@@ -227,8 +272,8 @@ async def run_round(
         conversation.append((second_agent, second_msg))
 
     # Phase 2: Secret choice (parallel)
-    a_reflections = "\n".join(game_state.agent_a_memory.reflections[-15:]) or "None yet."
-    b_reflections = "\n".join(game_state.agent_b_memory.reflections[-15:]) or "None yet."
+    a_reflections = "\n".join(game_state.agent_a_memory.reflections[-MEMORY_WINDOW:]) or "None yet."
+    b_reflections = "\n".join(game_state.agent_b_memory.reflections[-MEMORY_WINDOW:]) or "None yet."
 
     transcript = "\n".join(f"{s}: {m}" for s, m in conversation)
 
@@ -297,10 +342,12 @@ async def run_round(
         ), "B"),
     )
 
-    round_state.agent_a_reflection = a_ref
-    round_state.agent_b_reflection = b_ref
-    game_state.agent_a_memory.reflections.append(a_ref)
-    game_state.agent_b_memory.reflections.append(b_ref)
+    a_reflection = _truncate_text(a_ref, MAX_REFLECTION_CHARS)
+    b_reflection = _truncate_text(b_ref, MAX_REFLECTION_CHARS)
+    round_state.agent_a_reflection = a_reflection
+    round_state.agent_b_reflection = b_reflection
+    game_state.agent_a_memory.reflections.append(_reflection_to_memory_entry(a_reflection))
+    game_state.agent_b_memory.reflections.append(_reflection_to_memory_entry(b_reflection))
     game_state.rounds.append(round_state)
 
     if on_update:

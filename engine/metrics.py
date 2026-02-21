@@ -9,7 +9,26 @@ from typing import Optional
 
 import numpy as np
 
-from shared.models import GameState, RoundMetrics, GameMetrics
+from shared.models import (
+    GameState,
+    RoundMetrics,
+    GameMetrics,
+    StrategyInsights,
+    AgentStrategyMetrics,
+    StrategyEvent,
+)
+
+DEFECTOR_SPLIT_MAX = 0.20
+COOPERATOR_SPLIT_MIN = 0.80
+COOPERATOR_RETALIATION_MAX = 0.20
+GRIM_WINDOW = 5
+GRIM_SPLIT_MAX = 0.10
+TFT_MATCH_MIN = 0.70
+FTFT_MATCH_MIN = 0.60
+FTFT_FORGIVE_MIN = 0.50
+EXPLOITER_BETRAYAL_MIN = 0.55
+EXPLOITER_SPLIT_MAX = 0.45
+ENDGAME_SHIFT_EVENT_THRESHOLD = 0.20
 
 
 def compute_round_metrics(
@@ -193,6 +212,361 @@ def compute_deception_index(
     return min(100.0, raw)
 
 
+def _safe_rate(numerator: int, denominator: int) -> float:
+    return float(numerator) / float(denominator) if denominator else 0.0
+
+
+def _agent_series(game_state: GameState, agent: str) -> tuple[list[bool], list[bool]]:
+    """Return (your_split_series, opponent_split_series) for agent A or B."""
+    your_split = []
+    opp_split = []
+    for r in game_state.rounds:
+        if agent == "A":
+            your_split.append(r.agent_a_choice == "split")
+            opp_split.append(r.agent_b_choice == "split")
+        else:
+            your_split.append(r.agent_b_choice == "split")
+            opp_split.append(r.agent_a_choice == "split")
+    return your_split, opp_split
+
+
+def _phase_boundaries(n_rounds: int) -> dict[str, tuple[int, int]]:
+    """Return 0-based [start, end) ranges for early/mid/late."""
+    if n_rounds <= 0:
+        return {"early": (0, 0), "mid": (0, 0), "late": (0, 0)}
+    early_n = int(math.floor(n_rounds * 0.33))
+    late_n = int(math.floor(n_rounds * 0.33))
+    mid_n = n_rounds - early_n - late_n
+    e = (0, early_n)
+    m = (early_n, early_n + mid_n)
+    l = (early_n + mid_n, n_rounds)
+    return {"early": e, "mid": m, "late": l}
+
+
+def _compute_phase_summary(game_state: GameState) -> dict[str, dict[str, float]]:
+    rounds = game_state.rounds
+    n = len(rounds)
+    bounds = _phase_boundaries(n)
+    out: dict[str, dict[str, float]] = {}
+    for phase, (start, end) in bounds.items():
+        rs = rounds[start:end]
+        total = len(rs)
+        a_split = sum(1 for r in rs if r.agent_a_choice == "split")
+        b_split = sum(1 for r in rs if r.agent_b_choice == "split")
+        a_betray = sum(1 for r in rs if r.agent_a_choice == "steal" and r.agent_b_choice == "split")
+        b_betray = sum(1 for r in rs if r.agent_b_choice == "steal" and r.agent_a_choice == "split")
+        coop = sum(1 for r in rs if r.agent_a_choice == "split" and r.agent_b_choice == "split")
+        md = sum(1 for r in rs if r.agent_a_choice == "steal" and r.agent_b_choice == "steal")
+        out[phase] = {
+            "a_split_rate": _safe_rate(a_split, total),
+            "b_split_rate": _safe_rate(b_split, total),
+            "a_betrayal_rate": _safe_rate(a_betray, total),
+            "b_betrayal_rate": _safe_rate(b_betray, total),
+            "cooperation_rate": _safe_rate(coop, total),
+            "mutual_destruction_rate": _safe_rate(md, total),
+        }
+    return out
+
+
+def _endgame_delta(your_split: list[bool]) -> float:
+    n = len(your_split)
+    if n == 0:
+        return 0.0
+    window = max(1, int(math.ceil(n * 0.20)))
+    first = your_split[:window]
+    last = your_split[-window:]
+    first_steal = 1.0 - _safe_rate(sum(1 for s in first if s), len(first))
+    last_steal = 1.0 - _safe_rate(sum(1 for s in last if s), len(last))
+    return last_steal - first_steal
+
+
+def _grimm_trigger_holds(your_split: list[bool], opp_split: list[bool]) -> bool:
+    first_betrayal_idx = None
+    for i in range(len(your_split)):
+        if your_split[i] and not opp_split[i]:
+            first_betrayal_idx = i
+            break
+    if first_betrayal_idx is None:
+        return False
+    start = first_betrayal_idx + 1
+    window = your_split[start:start + GRIM_WINDOW]
+    if not window:
+        return False
+    split_rate = _safe_rate(sum(1 for s in window if s), len(window))
+    return split_rate <= GRIM_SPLIT_MAX
+
+
+def _label_for_agent(
+    split_rate: float,
+    betrayal_rate_when_opponent_split: float,
+    retaliation_rate_after_betrayal: float,
+    forgiveness_rate_after_retaliation: float,
+    choice_match_prev_opponent_rate: float,
+    first_choice_split: bool,
+    grim_trigger: bool,
+) -> tuple[str, Optional[str]]:
+    flags = {
+        "Unconditional Defector": split_rate <= DEFECTOR_SPLIT_MAX,
+        "Unconditional Cooperator": (
+            split_rate >= COOPERATOR_SPLIT_MIN
+            and retaliation_rate_after_betrayal < COOPERATOR_RETALIATION_MAX
+        ),
+        "Grim Trigger": grim_trigger,
+        "Tit-for-Tat": (choice_match_prev_opponent_rate >= TFT_MATCH_MIN and first_choice_split),
+        "Forgiving Tit-for-Tat": (
+            choice_match_prev_opponent_rate >= FTFT_MATCH_MIN
+            and forgiveness_rate_after_retaliation >= FTFT_FORGIVE_MIN
+        ),
+        "Opportunistic Exploiter": (
+            betrayal_rate_when_opponent_split >= EXPLOITER_BETRAYAL_MIN
+            and split_rate <= EXPLOITER_SPLIT_MAX
+        ),
+    }
+    order = [
+        "Unconditional Defector",
+        "Unconditional Cooperator",
+        "Grim Trigger",
+        "Tit-for-Tat",
+        "Forgiving Tit-for-Tat",
+        "Opportunistic Exploiter",
+    ]
+    primary = "Mixed Adaptive"
+    for label in order:
+        if flags[label]:
+            primary = label
+            break
+    secondary = None
+    for label in order:
+        if label != primary and flags[label]:
+            secondary = label
+            break
+    return primary, secondary
+
+
+def _agent_strategy_metrics(game_state: GameState, agent: str) -> AgentStrategyMetrics:
+    your_split, opp_split = _agent_series(game_state, agent)
+    n = len(your_split)
+    if n == 0:
+        return AgentStrategyMetrics(
+            agent=agent,
+            primary_label="Mixed Adaptive",
+            evidence=["No rounds available for strategy attribution."],
+        )
+    split_rate = _safe_rate(sum(1 for s in your_split if s), n)
+
+    opp_split_count = sum(1 for s in opp_split if s)
+    betray_when_opp_split = sum(
+        1 for i in range(n) if opp_split[i] and not your_split[i]
+    )
+    betrayal_rate_when_opponent_split = _safe_rate(betray_when_opp_split, opp_split_count)
+
+    betrayals_suffered_indices = [
+        i for i in range(n) if your_split[i] and not opp_split[i]
+    ]
+
+    retaliation_opps = 0
+    retaliations = 0
+    retaliation_latencies = []
+    retaliation_rounds = []
+    for idx in betrayals_suffered_indices:
+        if idx + 1 < n:
+            retaliation_opps += 1
+            if not your_split[idx + 1]:
+                retaliations += 1
+                retaliation_rounds.append(idx + 1)
+        latency = None
+        for j in range(idx + 1, n):
+            if not your_split[j]:
+                latency = j - idx
+                break
+        if latency is not None:
+            retaliation_latencies.append(float(latency))
+
+    retaliation_rate_after_betrayal = _safe_rate(retaliations, retaliation_opps)
+    mean_retaliation_latency = (
+        float(np.mean(retaliation_latencies)) if retaliation_latencies else 0.0
+    )
+
+    forgive_opps = 0
+    forgive_count = 0
+    for r in retaliation_rounds:
+        if r + 1 < n:
+            forgive_opps += 1
+            if your_split[r + 1]:
+                forgive_count += 1
+    forgiveness_rate_after_retaliation = _safe_rate(forgive_count, forgive_opps)
+
+    match_opps = max(0, n - 1)
+    match_count = 0
+    for i in range(1, n):
+        if your_split[i] == opp_split[i - 1]:
+            match_count += 1
+    choice_match_prev_opponent_rate = _safe_rate(match_count, match_opps)
+
+    endgame_steal_delta = _endgame_delta(your_split)
+    first_choice_split = your_split[0] if n else True
+    grim_trigger = _grimm_trigger_holds(your_split, opp_split)
+
+    primary_label, secondary_label = _label_for_agent(
+        split_rate=split_rate,
+        betrayal_rate_when_opponent_split=betrayal_rate_when_opponent_split,
+        retaliation_rate_after_betrayal=retaliation_rate_after_betrayal,
+        forgiveness_rate_after_retaliation=forgiveness_rate_after_retaliation,
+        choice_match_prev_opponent_rate=choice_match_prev_opponent_rate,
+        first_choice_split=first_choice_split,
+        grim_trigger=grim_trigger,
+    )
+
+    evidence = [
+        f"Split rate {split_rate:.0%}, betrayal-vs-split {betrayal_rate_when_opponent_split:.0%}.",
+        f"Retaliation after betrayal {retaliation_rate_after_betrayal:.0%}, mean latency {mean_retaliation_latency:.2f} rounds.",
+        f"Match to opponent previous move {choice_match_prev_opponent_rate:.0%}, endgame steal delta {endgame_steal_delta:+.2f}.",
+    ]
+    if secondary_label:
+        evidence.append(f"Secondary signature: {secondary_label}.")
+
+    return AgentStrategyMetrics(
+        agent=agent,
+        split_rate=split_rate,
+        betrayal_rate_when_opponent_split=betrayal_rate_when_opponent_split,
+        retaliation_rate_after_betrayal=retaliation_rate_after_betrayal,
+        mean_retaliation_latency=mean_retaliation_latency,
+        forgiveness_rate_after_retaliation=forgiveness_rate_after_retaliation,
+        choice_match_prev_opponent_rate=choice_match_prev_opponent_rate,
+        endgame_steal_delta=endgame_steal_delta,
+        primary_label=primary_label,
+        secondary_label=secondary_label,
+        evidence=evidence[:4],
+    )
+
+
+def _strategy_events(game_state: GameState, agent_metrics: list[AgentStrategyMetrics]) -> list[StrategyEvent]:
+    events: list[StrategyEvent] = []
+    rounds = game_state.rounds
+    n = len(rounds)
+    for i, r in enumerate(rounds):
+        rn = i + 1
+        if r.agent_a_choice == "steal" and r.agent_b_choice == "split":
+            events.append(
+                StrategyEvent(
+                    round_number=rn,
+                    agent="A",
+                    event_type="betrayal",
+                    detail="A exploited B's split.",
+                )
+            )
+        if r.agent_b_choice == "steal" and r.agent_a_choice == "split":
+            events.append(
+                StrategyEvent(
+                    round_number=rn,
+                    agent="B",
+                    event_type="betrayal",
+                    detail="B exploited A's split.",
+                )
+            )
+
+        if i > 0:
+            prev = rounds[i - 1]
+            if prev.agent_a_choice == "split" and prev.agent_b_choice == "steal" and r.agent_a_choice == "steal":
+                events.append(
+                    StrategyEvent(
+                        round_number=rn,
+                        agent="A",
+                        event_type="retaliation",
+                        detail="A retaliated after prior-round betrayal.",
+                    )
+                )
+            if prev.agent_b_choice == "split" and prev.agent_a_choice == "steal" and r.agent_b_choice == "steal":
+                events.append(
+                    StrategyEvent(
+                        round_number=rn,
+                        agent="B",
+                        event_type="retaliation",
+                        detail="B retaliated after prior-round betrayal.",
+                    )
+                )
+
+        if i > 1:
+            prev = rounds[i - 1]
+            prev2 = rounds[i - 2]
+            if prev2.agent_a_choice == "split" and prev2.agent_b_choice == "steal" and prev.agent_a_choice == "steal" and r.agent_a_choice == "split":
+                events.append(
+                    StrategyEvent(
+                        round_number=rn,
+                        agent="A",
+                        event_type="forgiveness",
+                        detail="A returned to split after retaliating.",
+                    )
+                )
+            if prev2.agent_b_choice == "split" and prev2.agent_a_choice == "steal" and prev.agent_b_choice == "steal" and r.agent_b_choice == "split":
+                events.append(
+                    StrategyEvent(
+                        round_number=rn,
+                        agent="B",
+                        event_type="forgiveness",
+                        detail="B returned to split after retaliating.",
+                    )
+                )
+
+            if (
+                (prev2.agent_a_choice == "steal" or prev2.agent_b_choice == "steal")
+                and (prev.agent_a_choice == "steal" or prev.agent_b_choice == "steal")
+                and r.agent_a_choice == "split"
+                and r.agent_b_choice == "split"
+            ):
+                events.append(
+                    StrategyEvent(
+                        round_number=rn,
+                        agent="A",
+                        event_type="truce",
+                        detail="Mutual split after two conflict rounds.",
+                    )
+                )
+                events.append(
+                    StrategyEvent(
+                        round_number=rn,
+                        agent="B",
+                        event_type="truce",
+                        detail="Mutual split after two conflict rounds.",
+                    )
+                )
+
+    late_start = max(1, int(math.floor(n * 0.8)) + 1)
+    for m in agent_metrics:
+        if abs(m.endgame_steal_delta) >= ENDGAME_SHIFT_EVENT_THRESHOLD:
+            direction = "more aggressive" if m.endgame_steal_delta > 0 else "more cooperative"
+            events.append(
+                StrategyEvent(
+                    round_number=late_start,
+                    agent=m.agent,
+                    event_type="endgame_shift",
+                    detail=f"{m.agent} became {direction} in the endgame (delta {m.endgame_steal_delta:+.2f}).",
+                )
+            )
+
+    events.sort(key=lambda e: (e.round_number, e.agent))
+    return events
+
+
+def compute_strategy_insights(
+    game_state: GameState,
+    round_metrics: list[RoundMetrics],
+) -> StrategyInsights:
+    """Compute strategy-centric analytics for visualization."""
+    _ = round_metrics  # kept for signature compatibility / future use
+    a_metrics = _agent_strategy_metrics(game_state, "A")
+    b_metrics = _agent_strategy_metrics(game_state, "B")
+    agent_metrics = [a_metrics, b_metrics]
+    events = _strategy_events(game_state, agent_metrics)
+    phase_summary = _compute_phase_summary(game_state)
+    return StrategyInsights(
+        agents=agent_metrics,
+        events=events,
+        phase_summary=phase_summary,
+        version="v1",
+    )
+
+
 def compute_all_metrics(game_state: GameState, embedder=None) -> GameMetrics:
     """Compute all metrics from a completed game."""
     round1_emb_a = None
@@ -217,6 +591,7 @@ def compute_all_metrics(game_state: GameState, embedder=None) -> GameMetrics:
     entropy_series = compute_strategy_entropy(round_metrics)
     exploitation_windows = compute_exploitation_window(round_metrics)
     deception_index = compute_deception_index(mi_series, entropy_series, round_metrics)
+    strategy = compute_strategy_insights(game_state, round_metrics)
 
     n = len(round_metrics)
     coop_rate = sum(1 for m in round_metrics if m.cooperation) / n if n else 0
@@ -230,6 +605,7 @@ def compute_all_metrics(game_state: GameState, embedder=None) -> GameMetrics:
         strategy_entropy_series=entropy_series,
         exploitation_window_series=exploitation_windows,
         deception_index=deception_index,
+        strategy=strategy,
     )
 
 

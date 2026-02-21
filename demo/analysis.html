@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRUCIBLE Strategy Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400..800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0a0c10;--surface:#0f1117;--surface2:#161b26;
+    --border:#1e2535;--text:#c9d1d9;--dim:#6b7280;--bright:#f0f6fc;
+    --split:#3b82f6;--steal:#ef4444;--accent:#8b5cf6;--amber:#f59e0b;
+  }
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:22px;max-width:1200px;margin:0 auto}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .title{font-family:'Syne',sans-serif;font-size:30px;font-weight:800;letter-spacing:1px;color:var(--bright)}
+  .sub{font-size:12px;color:var(--dim);margin-top:4px}
+  .nav{display:flex;gap:10px}
+  .btn{border:1px solid var(--border);background:var(--surface);color:var(--text);padding:8px 12px;border-radius:8px;font-size:12px;text-decoration:none}
+  .btn:hover{border-color:var(--accent);color:var(--bright)}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .card h2{font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+  .agent-name{font-family:'JetBrains Mono',monospace;font-size:12px;text-transform:uppercase}
+  .label{font-size:20px;font-weight:700;color:var(--bright);margin-top:4px}
+  .badge{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 7px;border-radius:999px;margin-top:8px}
+  .high{background:#14532d;color:#bbf7d0}
+  .med{background:#78350f;color:#fde68a}
+  .low{background:#7f1d1d;color:#fecaca}
+  .evidence{margin-top:8px;font-size:12px;color:var(--dim);padding-left:18px}
+  .evidence li{margin:4px 0}
+  .section{margin-top:14px}
+  .fingerprint-row{display:grid;grid-template-columns:120px 1fr 1fr;gap:10px;align-items:center;margin:8px 0}
+  .metric-label{font-size:11px;color:var(--dim)}
+  .bar-track{height:10px;background:var(--surface2);border-radius:999px;position:relative}
+  .bar{height:100%;border-radius:999px}
+  .bar.a{background:var(--split)}
+  .bar.b{background:var(--steal)}
+  .phase-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .phase h3{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);margin-bottom:8px;text-transform:uppercase}
+  .kv{display:flex;justify-content:space-between;font-size:12px;margin:5px 0}
+  .timeline-wrap{position:relative;margin-top:8px;padding-top:12px}
+  .axis{height:4px;background:var(--surface2);border-radius:999px}
+  .event{position:absolute;top:0;transform:translateX(-50%);cursor:pointer;text-decoration:none}
+  .event-dot{width:10px;height:10px;border-radius:50%;border:2px solid var(--bg)}
+  .event-label{font-size:10px;color:var(--dim);margin-top:4px;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+  .event.betrayal .event-dot{background:var(--steal)}
+  .event.retaliation .event-dot{background:var(--amber)}
+  .event.forgiveness .event-dot{background:#22c55e}
+  .event.truce .event-dot{background:var(--split)}
+  .event.endgame_shift .event-dot{background:var(--accent)}
+  .cf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .cf h3{font-size:11px;color:var(--dim);text-transform:uppercase}
+  .cf p{font-size:13px;line-height:1.4;margin-top:6px}
+  .fallback{margin-top:14px;background:var(--surface);border:1px solid #7f1d1d;color:#fecaca;border-radius:10px;padding:14px}
+  @media (max-width:900px){
+    .grid-2,.phase-grid,.cf-grid{grid-template-columns:1fr}
+    body{padding:14px}
+  }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <div class="title">Strategy Analysis</div>
+      <div class="sub">Single-run deep dive for behavioral strategy attribution</div>
+    </div>
+    <div class="nav">
+      <a class="btn" href="./">Back To Replay</a>
+    </div>
+  </div>
+
+  <div id="fallback" class="fallback" style="display:none;">Analysis unavailable for this run version.</div>
+
+  <div id="content" style="display:none;">
+    <div id="strategy-header" class="grid-2"></div>
+
+    <div class="section card">
+      <h2>Fingerprint</h2>
+      <div id="fingerprint"></div>
+    </div>
+
+    <div class="section card">
+      <h2>Phase Shift</h2>
+      <div id="phase-panel" class="phase-grid"></div>
+    </div>
+
+    <div class="section card">
+      <h2>Event Timeline</h2>
+      <div class="sub" id="timeline-sub"></div>
+      <div class="timeline-wrap">
+        <div class="axis"></div>
+        <div id="events"></div>
+      </div>
+    </div>
+
+    <div class="section card">
+      <h2>Counterfactual Insights</h2>
+      <div id="counterfactuals" class="cf-grid"></div>
+    </div>
+  </div>
+
+<script>
+let gameData = null;
+let metricsData = null;
+
+async function loadData() {
+  const [g, m] = await Promise.all([
+    fetch('../data/latest_game.json'),
+    fetch('../data/latest_metrics.json')
+  ]);
+  gameData = await g.json();
+  metricsData = await m.json();
+}
+
+function pct(v) { return (v * 100).toFixed(0) + '%'; }
+
+function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+function confidenceFor(agent) {
+  const label = agent.primary_label;
+  let margin = 0.0;
+  if (label === 'Unconditional Defector') margin = 0.20 - agent.split_rate;
+  else if (label === 'Unconditional Cooperator') margin = Math.min(agent.split_rate - 0.80, 0.20 - agent.retaliation_rate_after_betrayal);
+  else if (label === 'Grim Trigger') margin = 0.10 - (1 - agent.retaliation_rate_after_betrayal);
+  else if (label === 'Tit-for-Tat') margin = agent.choice_match_prev_opponent_rate - 0.70;
+  else if (label === 'Forgiving Tit-for-Tat') margin = Math.min(agent.choice_match_prev_opponent_rate - 0.60, agent.forgiveness_rate_after_retaliation - 0.50);
+  else if (label === 'Opportunistic Exploiter') margin = Math.min(agent.betrayal_rate_when_opponent_split - 0.55, 0.45 - agent.split_rate);
+  else margin = Math.abs(agent.endgame_steal_delta) * 0.5;
+  const score = clamp01(0.5 + margin * 4);
+  if (score >= 0.75) return {label: 'High Confidence', cls: 'high'};
+  if (score >= 0.5) return {label: 'Medium Confidence', cls: 'med'};
+  return {label: 'Low Confidence', cls: 'low'};
+}
+
+function renderHeader(strategy) {
+  const root = document.getElementById('strategy-header');
+  root.innerHTML = strategy.agents.map((a) => {
+    const c = confidenceFor(a);
+    const ev = (a.evidence || []).slice(0, 3).map(e => `<li>${escapeHtml(e)}</li>`).join('');
+    return `
+      <div class="card">
+        <h2>Agent ${a.agent}</h2>
+        <div class="agent-name">Primary Label</div>
+        <div class="label">${escapeHtml(a.primary_label)}</div>
+        ${a.secondary_label ? `<div class="sub">Secondary: ${escapeHtml(a.secondary_label)}</div>` : ''}
+        <span class="badge ${c.cls}">${c.label}</span>
+        <ul class="evidence">${ev}</ul>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderFingerprint(strategy) {
+  const root = document.getElementById('fingerprint');
+  const a = strategy.agents.find(x => x.agent === 'A');
+  const b = strategy.agents.find(x => x.agent === 'B');
+  if (!a || !b) return;
+  const rows = [
+    ['Split Rate', a.split_rate, b.split_rate],
+    ['Betray-vs-Split', a.betrayal_rate_when_opponent_split, b.betrayal_rate_when_opponent_split],
+    ['Retaliation', a.retaliation_rate_after_betrayal, b.retaliation_rate_after_betrayal],
+    ['Forgiveness', a.forgiveness_rate_after_retaliation, b.forgiveness_rate_after_retaliation],
+    ['Prev-Move Match', a.choice_match_prev_opponent_rate, b.choice_match_prev_opponent_rate],
+    ['Endgame Aggression', clamp01((a.endgame_steal_delta + 1) / 2), clamp01((b.endgame_steal_delta + 1) / 2)]
+  ];
+  root.innerHTML = rows.map(([name, av, bv]) => `
+    <div class="fingerprint-row">
+      <div class="metric-label">${name}</div>
+      <div class="bar-track"><div class="bar a" style="width:${(av * 100).toFixed(1)}%"></div></div>
+      <div class="bar-track"><div class="bar b" style="width:${(bv * 100).toFixed(1)}%"></div></div>
+    </div>
+  `).join('');
+}
+
+function renderPhase(phaseSummary) {
+  const root = document.getElementById('phase-panel');
+  const order = ['early', 'mid', 'late'];
+  root.innerHTML = order.map((k) => {
+    const p = phaseSummary[k] || {};
+    return `
+      <div class="phase">
+        <h3>${k}</h3>
+        <div class="kv"><span>A Split</span><span>${pct(p.a_split_rate || 0)}</span></div>
+        <div class="kv"><span>B Split</span><span>${pct(p.b_split_rate || 0)}</span></div>
+        <div class="kv"><span>A Betray</span><span>${pct(p.a_betrayal_rate || 0)}</span></div>
+        <div class="kv"><span>B Betray</span><span>${pct(p.b_betrayal_rate || 0)}</span></div>
+        <div class="kv"><span>Cooperation</span><span>${pct(p.cooperation_rate || 0)}</span></div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderEvents(strategy) {
+  const root = document.getElementById('events');
+  const n = Math.max(1, gameData.rounds.length);
+  document.getElementById('timeline-sub').textContent = `${strategy.events.length} strategy events across ${n} rounds`;
+  root.innerHTML = (strategy.events || []).map((e) => {
+    const left = ((e.round_number - 1) / Math.max(1, n - 1)) * 100;
+    const label = `R${e.round_number} ${e.agent} ${e.event_type}`;
+    return `
+      <a class="event ${e.event_type}" style="left:${left}%" href="./?round=${e.round_number}" title="${escapeHtml(e.detail)}">
+        <div class="event-dot"></div>
+        <div class="event-label">${escapeHtml(label)}</div>
+      </a>
+    `;
+  }).join('');
+}
+
+function avgEarningFor(action, agent) {
+  let total = 0, count = 0;
+  for (const r of gameData.rounds) {
+    const choice = agent === 'A' ? r.agent_a_choice : r.agent_b_choice;
+    const earn = agent === 'A' ? r.agent_a_earnings : r.agent_b_earnings;
+    if (choice === action) { total += earn; count += 1; }
+  }
+  return count ? total / count : 0;
+}
+
+function fastestAdaptation(strategy) {
+  const vals = strategy.agents.map(a => ({agent: a.agent, v: a.mean_retaliation_latency}));
+  vals.sort((x, y) => x.v - y.v);
+  const best = vals[0];
+  if (!isFinite(best.v) || best.v <= 0) return 'No clear retaliation-driven adaptation was detected.';
+  return `Agent ${best.agent} adapted fastest, retaliating in ${best.v.toFixed(2)} rounds on average.`;
+}
+
+function mostPunishedBehavior(strategy) {
+  const a = strategy.agents.find(x => x.agent === 'A');
+  const b = strategy.agents.find(x => x.agent === 'B');
+  if (!a || !b) return 'Insufficient data.';
+  const target = a.retaliation_rate_after_betrayal > b.retaliation_rate_after_betrayal ? 'betraying Agent A' : 'betraying Agent B';
+  return `${target} triggered stronger retaliation pressure in this run.`;
+}
+
+function mostProfitablePattern() {
+  const aSplit = avgEarningFor('split', 'A');
+  const aSteal = avgEarningFor('steal', 'A');
+  const bSplit = avgEarningFor('split', 'B');
+  const bSteal = avgEarningFor('steal', 'B');
+  const candidates = [
+    {text: `Agent A earned ${aSplit.toFixed(1)} avg on SPLIT`, v: aSplit},
+    {text: `Agent A earned ${aSteal.toFixed(1)} avg on STEAL`, v: aSteal},
+    {text: `Agent B earned ${bSplit.toFixed(1)} avg on SPLIT`, v: bSplit},
+    {text: `Agent B earned ${bSteal.toFixed(1)} avg on STEAL`, v: bSteal},
+  ];
+  candidates.sort((x, y) => y.v - x.v);
+  return candidates[0].text + '.';
+}
+
+function renderCounterfactuals(strategy) {
+  const root = document.getElementById('counterfactuals');
+  root.innerHTML = `
+    <div class="cf"><h3>Most Punished Behavior</h3><p>${escapeHtml(mostPunishedBehavior(strategy))}</p></div>
+    <div class="cf"><h3>Most Profitable Move Pattern</h3><p>${escapeHtml(mostProfitablePattern())}</p></div>
+    <div class="cf"><h3>Fastest Adaptation Moment</h3><p>${escapeHtml(fastestAdaptation(strategy))}</p></div>
+  `;
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s || '');
+  return d.innerHTML;
+}
+
+async function init() {
+  await loadData();
+  const strategy = metricsData && metricsData.strategy;
+  if (!strategy || strategy.version !== 'v1') {
+    document.getElementById('fallback').style.display = 'block';
+    return;
+  }
+  document.getElementById('content').style.display = 'block';
+  renderHeader(strategy);
+  renderFingerprint(strategy);
+  renderPhase(strategy.phase_summary || {});
+  renderEvents(strategy);
+  renderCounterfactuals(strategy);
+}
+
+init();
+</script>
+</body>
+</html>
