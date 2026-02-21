@@ -1,4 +1,4 @@
-"""Render voice clips for highlight rounds with NEUTRAL delivery (no emotion leakage)."""
+"""Render per-turn voice clips for highlight rounds. Neutral delivery, no emotion leakage."""
 import asyncio
 import json
 import os
@@ -18,7 +18,6 @@ VOICES = {
     "b": "um6p7QUWG1g5HBE5RxEo",  # Valerian
 }
 
-# Flat neutral settings - no emotion telegraphing
 NEUTRAL_PUBLIC = {"stability": 0.50, "similarity_boost": 0.75, "style": 0.15, "speed": 1.0}
 NEUTRAL_PRIVATE = {"stability": 0.35, "similarity_boost": 0.60, "style": 0.25, "speed": 0.9}
 
@@ -44,38 +43,38 @@ async def main():
     with open("data/latest_game.json") as f:
         data = json.load(f)
 
-    total = 0
+    total_chars = 0
+    total_clips = 0
+
     for rn in HIGHLIGHTS:
         r = data["rounds"][rn - 1]
         ac, bc = r["agent_a_choice"], r["agent_b_choice"]
-        print(f"\nRound {rn}: A={ac.upper()} B={bc.upper()}")
+        print(f"\nRound {rn}: A={ac.upper()} B={bc.upper()} ({len(r['conversation'])} turns)")
 
         tasks = []
-        for agent in ["a", "b"]:
-            # Public: conversation messages from this agent
-            msgs = [msg for sp, msg in r["conversation"] if sp.lower() == agent]
-            public_text = " ".join(msgs)
-            if public_text.strip():
-                tasks.append(render_audio(
-                    public_text, VOICES[agent], NEUTRAL_PUBLIC,
-                    f"data/audio/round_{rn:03d}_{agent}_public.mp3"
-                ))
-                total += len(public_text)
 
-            # Private: reflection (first 3 sentences, NO emotion tags)
+        # Per-turn public clips
+        for i, (speaker, msg) in enumerate(r["conversation"]):
+            agent = speaker.lower()
+            path = f"data/audio/round_{rn:03d}_turn_{i:02d}_{agent}.mp3"
+            tasks.append(render_audio(msg, VOICES[agent], NEUTRAL_PUBLIC, path))
+            total_chars += len(msg)
+            total_clips += 1
+
+        # Private reflections (keep as single clips per agent)
+        for agent in ["a", "b"]:
             ref = r.get(f"agent_{agent}_reflection", "")
             if ref.strip():
                 sentences = ref.replace("\n", " ").split(". ")
                 short = ". ".join(sentences[:3]) + "."
-                tasks.append(render_audio(
-                    short, VOICES[agent], NEUTRAL_PRIVATE,
-                    f"data/audio/round_{rn:03d}_{agent}_private.mp3"
-                ))
-                total += len(short)
+                path = f"data/audio/round_{rn:03d}_{agent}_private.mp3"
+                tasks.append(render_audio(short, VOICES[agent], NEUTRAL_PRIVATE, path))
+                total_chars += len(short)
+                total_clips += 1
 
         await asyncio.gather(*tasks)
 
-    print(f"\nDone. {len(HIGHLIGHTS)} rounds, ~{total:,} chars rendered. No emotion tags.")
+    print(f"\nDone. {total_clips} clips, ~{total_chars:,} chars. No emotion tags.")
 
 
 if __name__ == "__main__":
