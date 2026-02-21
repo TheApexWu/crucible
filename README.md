@@ -22,8 +22,12 @@ cp .env.example .env  # add your API keys
 # Optional: override model (default is gemini-2.5-flash)
 # GEMINI_MODEL=gemini-2.5-flash
 
-# Run 100 rounds
+# Run 100 rounds (balanced competitive prompt mode is default)
 python -m engine.run --rounds 100 --turns 3
+# Optional prompt controls:
+#   --prompt-mode {balanced_competitive,hard_max,legacy}
+#   --psychology-block {on,off}
+#   --deception-policy {explicit,implicit,discourage}
 
 # Render voice clips for highlight rounds
 python -m engine.voice --rounds auto
@@ -40,6 +44,9 @@ python -m engine.distill
 # Optional: evaluate the distilled bundle
 python -m engine.skill_eval
 # Output: data/latest_skill_eval.json
+
+# Optional: compare legacy vs competitive prompt framing
+python scripts/compare_prompt_modes.py --rounds 25 --turns 2
 ```
 
 ## Structure

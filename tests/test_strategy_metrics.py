@@ -125,7 +125,17 @@ class FrontendSmokeTests(unittest.TestCase):
     def test_replay_page_links_analysis(self):
         text = Path("demo/index.html").read_text()
         self.assertIn("analysis.html", text)
+        self.assertIn("skills.html", text)
         self.assertIn("round", text)
+
+    def test_skills_page_contains_v2_sections(self):
+        text = Path("demo/skills.html").read_text()
+        self.assertIn("Signal Quality", text)
+        self.assertIn("Winner vs Contrast", text)
+        self.assertIn("Translation Trace Matrix", text)
+        self.assertIn("LLM Refinement Diff", text)
+        self.assertIn("Actionability Panel", text)
+        self.assertIn("Skills UI unavailable", text)
 
 
 if __name__ == "__main__":
