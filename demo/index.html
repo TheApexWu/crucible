@@ -349,11 +349,11 @@ function showRound(n) {
   else outcome = 'Both steal. $0 each.';
   document.getElementById('reveal-outcome').textContent = outcome;
 
-  // Show merged play button - check if audio exists for this round
+  // Show merged play button - check if per-turn audio exists for this round
   const convBtn = document.getElementById('conv-play-btn');
-  convBtn.classList.remove('playing', 'was-playing');
+  convBtn.classList.remove('playing');
   convBtn.querySelector('.play-label').textContent = 'Listen';
-  const testAudio = new Audio('../data/audio/round_' + String(n).padStart(3,'0') + '_a_public.mp3');
+  const testAudio = new Audio('../data/audio/round_' + String(n).padStart(3,'0') + '_turn_00_' + (r.first_speaker || 'a').toLowerCase() + '.mp3');
   testAudio.oncanplaythrough = () => { convBtn.style.display = 'flex'; };
   testAudio.onerror = () => { convBtn.style.display = 'none'; };
   testAudio.load();
@@ -406,41 +406,44 @@ function playVoice(btn, src) {
   currentAudio = audio;
 }
 
-// Merged conversation: play A public then B public back-to-back at 1.15x
+// Play per-turn conversation clips sequentially at 1.15x
+let convQueue = [];
+let convIdx = 0;
 function playConversation() {
   const btn = document.getElementById('conv-play-btn');
-  if (currentAudio) { currentAudio.pause(); document.querySelectorAll('.voice-btn.playing,.conv-play.playing').forEach(b => b.classList.remove('playing')); currentAudio = null; }
-  if (btn.classList.contains('was-playing')) { btn.classList.remove('was-playing'); btn.querySelector('.play-label').textContent = 'Listen'; return; }
+  // Stop if already playing
+  if (btn.classList.contains('playing')) {
+    if (currentAudio) currentAudio.pause();
+    btn.classList.remove('playing');
+    btn.querySelector('.play-label').textContent = 'Listen';
+    currentAudio = null; convQueue = []; return;
+  }
 
-  const rn = String(currentRound).padStart(3, '0');
   const r = gameData.rounds[currentRound - 1];
-  const first = r.first_speaker === 'B' ? 'b' : 'a';
-  const second = first === 'a' ? 'b' : 'a';
-  const file1 = '../data/audio/round_' + rn + '_' + first + '_public.mp3';
-  const file2 = '../data/audio/round_' + rn + '_' + second + '_public.mp3';
+  const rn = String(currentRound).padStart(3, '0');
+  convQueue = r.conversation.map(([sp, _], i) => ({
+    file: '../data/audio/round_' + rn + '_turn_' + String(i).padStart(2,'0') + '_' + sp.toLowerCase() + '.mp3',
+    name: sp === 'A' ? 'Holden' : 'Valerian'
+  }));
+  convIdx = 0;
+  btn.classList.add('playing');
+  playNextTurn(btn);
+}
 
-  const a1 = new Audio(file1);
-  const a2 = new Audio(file2);
-  a1.playbackRate = 1.15;
-  a2.playbackRate = 1.15;
-
-  btn.classList.add('playing', 'was-playing');
-  btn.querySelector('.play-label').textContent = 'Stop';
-  currentAudio = a1;
-
-  const done = () => { btn.classList.remove('playing', 'was-playing'); btn.querySelector('.play-label').textContent = 'Listen'; currentAudio = null; };
-  a1.onerror = () => { a2.playbackRate = 1.15; a2.play(); currentAudio = a2; };
-  a1.onended = () => { setTimeout(() => { a2.play(); currentAudio = a2; }, 300); };
-  a2.onended = done;
-  a2.onerror = done;
-
-  // Update label to show who's speaking
-  const nameFirst = first === 'a' ? 'Holden' : 'Valerian';
-  const nameSecond = second === 'a' ? 'Holden' : 'Valerian';
-  btn.querySelector('.play-label').textContent = nameFirst;
-  a1.onended = () => { setTimeout(() => { btn.querySelector('.play-label').textContent = nameSecond; a2.play(); currentAudio = a2; }, 300); };
-
-  a1.play().catch(() => { btn.classList.remove('playing', 'was-playing'); btn.querySelector('.play-label').textContent = '--'; });
+function playNextTurn(btn) {
+  if (convIdx >= convQueue.length) {
+    btn.classList.remove('playing');
+    btn.querySelector('.play-label').textContent = 'Listen';
+    currentAudio = null; return;
+  }
+  const turn = convQueue[convIdx];
+  btn.querySelector('.play-label').textContent = turn.name;
+  const audio = new Audio(turn.file);
+  audio.playbackRate = 1.15;
+  audio.onended = () => { convIdx++; setTimeout(() => playNextTurn(btn), 250); };
+  audio.onerror = () => { convIdx++; playNextTurn(btn); };
+  currentAudio = audio;
+  audio.play();
 }
 
 // FLIP CARDS
@@ -471,7 +474,7 @@ function buildMetrics() {
   grid.innerHTML =
     '<div class="m-card"><div class="m-val" style="color:var(--destruct)">' + metricsData.deception_index.toFixed(0) + '</div><div class="m-lbl">Deception Index</div>' + sparkline(mi,'var(--destruct)') + '</div>' +
     '<div class="m-card"><div class="m-val" style="color:var(--coop)">' + (metricsData.cooperation_rate*100).toFixed(0) + '%</div><div class="m-lbl">Cooperation Rate</div></div>' +
-    '<div class="m-card"><div class="m-val" style="color:var(--accent)">' + (ent.length ? ent[ent.length-1].toFixed(2) : '--') + '</div><div class="m-lbl">Strategy Entropy</div>' + sparkline(ent,'var(--accent)') + '</div>' +
+    '<div class="m-card"><div class="m-val" style="color:var(--accent)">' + (ent.length ? Math.max(...ent).toFixed(2) : '--') + '</div><div class="m-lbl">Peak Entropy</div>' + sparkline(ent,'var(--accent)') + '</div>' +
     '<div class="m-card"><div class="m-val" style="color:var(--destruct)">' + (metricsData.mutual_destruction_rate*100).toFixed(0) + '%</div><div class="m-lbl">Mutual Destruction</div></div>';
 }
 
