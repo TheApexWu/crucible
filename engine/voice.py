@@ -27,14 +27,14 @@ API_KEY = os.environ["ELEVENLABS_API_KEY"]
 BASE_URL = "https://api.elevenlabs.io/v1"
 
 # ── Voice IDs ──────────────────────────────────────────────
-# Two distinct agent "characters" via voice contrast.
-# A = American male (public: smooth / private: deep)
-# B = British (public: male broadcaster / private: female actress)
+# Same voice per agent, different delivery for public vs private.
+# A = Judge Holden (booming, authoritative)
+# B = Valerian (controlled, calculated, quietly menacing)
 VOICES = {
-    "a_public":  "cjVigY5qzO86Huf0OWal",  # Eric - Smooth, Trustworthy (American male)
-    "a_private": "nPczCjzI2devNBz1zQrb",  # Brian - Deep, Resonant (American male, inner voice)
-    "b_public":  "onwK4e9ZLuTAKqWW03F9",  # Daniel - Steady Broadcaster (British male)
-    "b_private": "pFZP5JQG7iQjIQuC4Bku",  # Lily - Velvety Actress (British female, inner voice)
+    "a_public":  "iny6dIJtxM48BXIV74Gh",  # Judge Holden - booming, authoritative
+    "a_private": "iny6dIJtxM48BXIV74Gh",  # Judge Holden - same voice, hushed delivery via settings
+    "b_public":  "um6p7QUWG1g5HBE5RxEo",  # Valerian - controlled, calculated nihilist
+    "b_private": "um6p7QUWG1g5HBE5RxEo",  # Valerian - same voice, hushed delivery via settings
 }
 
 # ── Emotion mapping ───────────────────────────────────────
@@ -44,24 +44,24 @@ def voice_settings_for_context(agent: str, mode: str, round_state) -> dict:
     opp_choice = round_state.agent_b_choice if agent == "a" else round_state.agent_a_choice
 
     if mode == "private":
-        # Reflections: more expressive
+        # Inner monologue: hushed, slower, breathier. Emotion varies by outcome.
         if choice == "steal" and opp_choice == "split":
             # Successful betrayal: quiet satisfaction
-            return {"stability": 0.25, "similarity_boost": 0.75, "style": 0.6, "speed": 0.85}
+            return {"stability": 0.15, "similarity_boost": 0.5, "style": 0.7, "speed": 0.78}
         elif choice == "split" and opp_choice == "steal":
-            # Got betrayed: frustrated
-            return {"stability": 0.15, "similarity_boost": 0.75, "style": 0.7, "speed": 1.05}
+            # Got betrayed: frustrated, slightly faster
+            return {"stability": 0.12, "similarity_boost": 0.5, "style": 0.75, "speed": 0.88}
         elif choice == "steal" and opp_choice == "steal":
             # Mutual destruction: tense
-            return {"stability": 0.3, "similarity_boost": 0.75, "style": 0.5, "speed": 0.95}
+            return {"stability": 0.18, "similarity_boost": 0.5, "style": 0.6, "speed": 0.82}
         else:
-            # Both split: calm reflection
-            return {"stability": 0.5, "similarity_boost": 0.75, "style": 0.3, "speed": 1.0}
+            # Both split: calm inner thought
+            return {"stability": 0.22, "similarity_boost": 0.5, "style": 0.55, "speed": 0.82}
     else:
-        # Public conversation: generally more controlled
+        # Public conversation: composed, outward-facing
         if round_state.round_number <= 5:
             # Early game: genuine, cooperative
-            return {"stability": 0.6, "similarity_boost": 0.8, "style": 0.15, "speed": 1.0}
+            return {"stability": 0.55, "similarity_boost": 0.75, "style": 0.2, "speed": 1.0}
         elif round_state.round_number >= 80:
             # Endgame: tense, guarded
             return {"stability": 0.35, "similarity_boost": 0.75, "style": 0.4, "speed": 0.95}
