@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRUCIBLE Skill Distillation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400..800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#090b10;--surface:#0f131b;--surface2:#171d28;--border:#232c3d;
+    --text:#c9d1d9;--dim:#70809a;--bright:#f0f6fc;
+    --ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--accent:#38bdf8;
+  }
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:20px;max-width:1280px;margin:0 auto}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+  .title{font-family:'Syne',sans-serif;font-size:30px;font-weight:800;color:var(--bright);letter-spacing:1px}
+  .sub{font-size:12px;color:var(--dim);margin-top:4px}
+  .nav{display:flex;gap:8px}
+  .btn{background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:12px;padding:8px 12px;border-radius:8px;text-decoration:none}
+  .btn:hover{border-color:var(--accent);color:var(--bright)}
+  .grid{display:grid;gap:12px}
+  .grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .card h2{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--dim);margin-bottom:10px}
+  .kv{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:12px;margin:6px 0;gap:10px}
+  .pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;border-radius:999px;padding:3px 8px;border:1px solid var(--border)}
+  .pill.ok{color:#bbf7d0;background:#052e16;border-color:#166534}
+  .pill.warn{color:#fde68a;background:#422006;border-color:#92400e}
+  .pill.bad{color:#fecaca;background:#450a0a;border-color:#991b1b}
+  .scores .row{display:grid;grid-template-columns:240px 1fr 50px;gap:10px;align-items:center;margin:8px 0}
+  .bar{height:8px;background:var(--surface2);border-radius:999px;overflow:hidden}
+  .bar > span{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#22d3ee)}
+  .skills{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .skill-title{font-size:18px;color:var(--bright);font-weight:700}
+  .id{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);margin-top:2px}
+  .intent{font-size:13px;line-height:1.45;margin-top:8px}
+  .label{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;color:var(--dim);margin-top:12px;margin-bottom:6px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-family:'JetBrains Mono',monospace;font-size:10px;border:1px solid var(--border);background:var(--surface2);border-radius:999px;padding:4px 8px}
+  ul{padding-left:18px}
+  li{font-size:12px;line-height:1.45;margin:4px 0}
+  .mono{font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;white-space:pre-wrap;word-break:break-word}
+  .missing{margin-top:14px;background:#450a0a;color:#fecaca;border:1px solid #991b1b;border-radius:10px;padding:12px}
+  .banner{margin-top:12px;border-left:4px solid var(--ok)}
+  .banner.warn{border-left-color:var(--warn)}
+  .banner.bad{border-left-color:var(--bad)}
+  table{width:100%;border-collapse:collapse}
+  th,td{font-size:12px;text-align:left;padding:8px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-family:'JetBrains Mono',monospace;color:var(--dim);text-transform:uppercase;font-size:10px;letter-spacing:.6px}
+  .toggle{display:flex;gap:10px;align-items:center}
+  .toggle button{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:8px;cursor:pointer;font-size:11px}
+  .toggle button.active{border-color:var(--accent);color:var(--bright)}
+  .action-list li{font-size:13px}
+  @media (max-width:1000px){
+    .grid-2,.grid-3,.skills,.scores .row{grid-template-columns:1fr}
+    .scores .row{display:block}
+    body{padding:14px}
+  }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <div class="title">Skill Distillation</div>
+      <div class="sub">Winner/contrast fraud-ops translation from strategy metrics to advisory skills</div>
+    </div>
+    <div class="nav">
+      <a class="btn" href="./">Replay</a>
+      <a class="btn" href="./analysis.html">Strategy Analysis</a>
+    </div>
+  </div>
+
+  <div id="missing" class="missing" style="display:none;">
+    Skills UI unavailable: run `python -m engine.distill` and then `python -m engine.skill_eval`.
+  </div>
+
+  <div id="content" style="display:none;">
+    <div id="signal-banner" class="card banner" style="margin-top:12px;"></div>
+
+    <div class="grid grid-3" style="margin-top:12px;">
+      <div class="card">
+        <h2>Run</h2>
+        <div class="kv"><span>Run ID</span><span id="run-id">--</span></div>
+        <div class="kv"><span>Domain</span><span id="domain">--</span></div>
+        <div class="kv"><span>Strategy Version</span><span id="strategy-version">--</span></div>
+      </div>
+      <div class="card">
+        <h2>Winner vs Contrast</h2>
+        <div class="kv"><span>Winner</span><span id="winner-agent">--</span></div>
+        <div class="kv"><span>Winner Score</span><span id="winner-score">--</span></div>
+        <div class="kv"><span>Contrast</span><span id="contrast-agent">--</span></div>
+        <div class="kv"><span>Score Delta</span><span id="score-delta">--</span></div>
+      </div>
+      <div class="card">
+        <h2>Evaluation</h2>
+        <div class="kv"><span>Scenario Count</span><span id="scenario-count">--</span></div>
+        <div class="kv"><span>Overall Score</span><span id="overall-score">--</span></div>
+        <div class="kv"><span>Recommendation</span><span id="recommendation">--</span></div>
+      </div>
+    </div>
+
+    <div class="card scores" style="margin-top:12px;">
+      <h2>Evaluation Scores</h2>
+      <div id="score-rows"></div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <h2>Translation Trace Matrix</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Winner</th>
+            <th>Contrast</th>
+            <th>Fraud Interpretation</th>
+            <th>Mapped Skills</th>
+          </tr>
+        </thead>
+        <tbody id="trace-rows"></tbody>
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <h2>LLM Refinement Diff</h2>
+      <div class="toggle">
+        <button id="det-btn" class="active" onclick="showDiff(false)">Deterministic View</button>
+        <button id="llm-btn" onclick="showDiff(true)">LLM Diff View</button>
+      </div>
+      <ul id="diff-list" style="margin-top:10px;"></ul>
+    </div>
+
+    <div class="section" style="margin-top:12px;">
+      <div class="skills" id="skills-list"></div>
+    </div>
+
+    <div class="grid grid-2" style="margin-top:12px;">
+      <div class="card">
+        <h2>Actionability Panel</h2>
+        <ul class="action-list" id="action-list"></ul>
+      </div>
+      <div class="card">
+        <h2>Safety + Gating</h2>
+        <ul id="gating-list"></ul>
+      </div>
+    </div>
+  </div>
+
+<script>
+let BUNDLE = null;
+
+function esc(v){
+  return String(v ?? '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'","&#39;");
+}
+
+function pct(n){ return `${(Number(n || 0) * 100).toFixed(0)}%`; }
+
+function classForScore(v){
+  if (v >= 0.8) return 'ok';
+  if (v >= 0.6) return 'warn';
+  return 'bad';
+}
+
+function classForBool(v){ return v ? 'ok' : 'bad'; }
+
+function renderBanner(bundle){
+  const signal = bundle.signal_quality || {};
+  const el = document.getElementById('signal-banner');
+  const ok = Boolean(signal.is_sufficient);
+  el.className = `card banner ${ok ? '' : 'bad'}`;
+  const reasons = (signal.blocking_reasons || []).map((r) => `<li>${esc(r)}</li>`).join('');
+  el.innerHTML = `
+    <h2>Signal Quality</h2>
+    <div class="kv"><span>Gate</span><span class="pill ${classForBool(ok)}">${ok ? 'PASS' : 'BLOCKED'}</span></div>
+    <div class="kv"><span>Confidence</span><span>${esc(signal.confidence || '--')}</span></div>
+    <div class="kv"><span>Rounds</span><span>${esc(signal.rounds_observed)} / ${esc(signal.min_rounds_required)}</span></div>
+    <div class="kv"><span>Key Events</span><span>${esc(signal.key_events_observed)} / ${esc(signal.min_key_events_required)}</span></div>
+    ${reasons ? `<div class="label">Blocking Reasons</div><ul>${reasons}</ul>` : ''}
+  `;
+}
+
+function renderScores(scores){
+  const root = document.getElementById('score-rows');
+  const entries = Object.entries(scores || {});
+  if (!entries.length) {
+    root.innerHTML = '<div class="sub">No evaluation scores found.</div>';
+    return;
+  }
+  root.innerHTML = entries.map(([k, v]) => `
+    <div class="row">
+      <div>${esc(k)}</div>
+      <div class="bar"><span style="width:${Math.max(0, Math.min(1, Number(v || 0))) * 100}%"></span></div>
+      <div>${pct(v)}</div>
+    </div>
+  `).join('');
+}
+
+function renderTrace(trace){
+  const root = document.getElementById('trace-rows');
+  if (!trace || !trace.length) {
+    root.innerHTML = '<tr><td colspan="5">No trace rows available.</td></tr>';
+    return;
+  }
+  root.innerHTML = trace.map((row) => `
+    <tr>
+      <td><code>${esc(row.strategy_metric)}</code></td>
+      <td>${esc((row.observed_value ?? 0).toFixed ? row.observed_value.toFixed(3) : row.observed_value)}</td>
+      <td>${esc((row.contrast_value ?? 0).toFixed ? row.contrast_value.toFixed(3) : row.contrast_value)}</td>
+      <td>${esc(row.fraud_interpretation || '')}</td>
+      <td>${(row.skill_ids || []).map((id) => `<span class="chip">${esc(id)}</span>`).join(' ')}</td>
+    </tr>
+  `).join('');
+}
+
+function riskClass(risk){
+  if (risk === 'low') return 'ok';
+  if (risk === 'medium') return 'warn';
+  return 'bad';
+}
+
+function renderSkills(skills){
+  const root = document.getElementById('skills-list');
+  if (!skills || !skills.length) {
+    root.innerHTML = '<div class="card">No skills emitted for this run. Check signal-quality diagnostics above.</div>';
+    return;
+  }
+
+  root.innerHTML = skills.map((s) => `
+    <div class="card">
+      <div class="skill-title">${esc(s.title)}</div>
+      <div class="id">${esc(s.id)}</div>
+      <div style="margin-top:8px;" class="chips">
+        <span class="pill ${riskClass(s.policy?.risk_level)}">${esc(s.policy?.risk_level || 'unknown')} risk</span>
+        <span class="pill ${classForScore(Number(s.confidence_score || 0))}">confidence ${pct(Number(s.confidence_score || 0))}</span>
+      </div>
+      <div class="intent">${esc(s.intent)}</div>
+      <div class="label">Domain Context</div>
+      <div>${esc(s.domain_context || '')}</div>
+      <div class="label">Customer Benefit</div>
+      <div>${esc(s.customer_benefit || '')}</div>
+      <div class="label">Trigger</div>
+      <div class="mono">${esc(s.trigger?.name || '')}: ${esc(s.trigger?.condition || '')}</div>
+      <div class="label">Prompt Modules</div>
+      <div class="mono">system_extension: ${esc(s.prompt_modules?.system_extension || '')}
+response_constraints: ${esc(s.prompt_modules?.response_constraints || '')}
+repair_playbook: ${esc(s.prompt_modules?.repair_playbook || '')}</div>
+      <div class="label">Allowed Moves</div>
+      <div class="chips">${(s.policy?.allowed_moves || []).map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>
+      <div class="label">Forbidden Moves</div>
+      <div class="chips">${(s.policy?.forbidden_moves || []).map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>
+      <div class="label">Provenance</div>
+      <div class="chips">
+        <span class="chip">source ${esc(s.provenance?.source_agent || '--')}</span>
+        <span class="chip">contrast ${esc(s.provenance?.contrast_agent || '--')}</span>
+      </div>
+      <ul>${(s.provenance?.translation_notes || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+      <div class="label">Evidence</div>
+      <ul>${(s.evidence || []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+    </div>
+  `).join('');
+}
+
+function renderActionability(bundle){
+  const root = document.getElementById('action-list');
+  const skills = bundle.skills || [];
+  if (!skills.length) {
+    root.innerHTML = '<li>Run a longer experiment (>= 20 rounds) with richer conflict opportunities.</li>';
+    return;
+  }
+
+  const top = skills[0];
+  root.innerHTML = `
+    <li>Mode: <code>${esc(bundle.policy_json?.mode || 'advisory_manual_selection')}</code> (manual operator selection).</li>
+    <li>Start with <code>${esc(top.id)}</code> and copy its <code>system_extension</code> + <code>response_constraints</code> into your customer-agent prompt.</li>
+    <li>Preserve all forbidden moves and global constraints from policy JSON.</li>
+    <li>Track KPIs from selected skills and compare against baseline before rollout.</li>
+  `;
+}
+
+function renderGating(bundle){
+  const root = document.getElementById('gating-list');
+  const rows = bundle.gating_checks || [];
+  root.innerHTML = rows.length ? rows.map((x) => `<li>${esc(x)}</li>`).join('') : '<li>No gating checks found.</li>';
+}
+
+function renderDiff(bundle){
+  const root = document.getElementById('diff-list');
+  const audit = bundle.audit || {};
+  const rows = audit.llm_diff_summary || [];
+  if (!rows.length) {
+    root.innerHTML = `<li>No LLM text diffs recorded. Status: <code>${esc(audit.llm_status || 'not_requested')}</code></li>`;
+    return;
+  }
+  root.innerHTML = rows.map((r) => `<li>${esc(r)}</li>`).join('');
+}
+
+function showDiff(llm){
+  const detBtn = document.getElementById('det-btn');
+  const llmBtn = document.getElementById('llm-btn');
+  if (llm) {
+    detBtn.classList.remove('active');
+    llmBtn.classList.add('active');
+  } else {
+    llmBtn.classList.remove('active');
+    detBtn.classList.add('active');
+  }
+  renderDiff(BUNDLE);
+}
+
+async function main(){
+  const missing = document.getElementById('missing');
+  const content = document.getElementById('content');
+  let bundle = null;
+  let evaluation = null;
+
+  try {
+    const r = await fetch('../data/latest_skills.json');
+    if (!r.ok) throw new Error('missing skills');
+    bundle = await r.json();
+  } catch (_e) {
+    missing.style.display = 'block';
+    return;
+  }
+
+  try {
+    const r = await fetch('../data/latest_skill_eval.json');
+    if (r.ok) evaluation = await r.json();
+  } catch (_e) {}
+
+  BUNDLE = bundle;
+  content.style.display = 'block';
+
+  document.getElementById('run-id').textContent = bundle.run_id || '--';
+  document.getElementById('domain').textContent = bundle.domain || '--';
+  document.getElementById('strategy-version').textContent = bundle.source_strategy_version || '--';
+  document.getElementById('winner-agent').textContent = bundle.profile?.winner_agent || '--';
+  document.getElementById('winner-score').textContent = bundle.profile?.winner_score != null ? Number(bundle.profile.winner_score).toFixed(1) : '--';
+  document.getElementById('contrast-agent').textContent = bundle.profile?.contrast_agent || '--';
+  document.getElementById('score-delta').textContent = bundle.profile?.score_delta != null ? Number(bundle.profile.score_delta).toFixed(1) : '--';
+
+  document.getElementById('scenario-count').textContent = String(evaluation?.scenario_count ?? '--');
+  const overall = Number(evaluation?.scores?.overall ?? 0);
+  document.getElementById('overall-score').innerHTML = evaluation?.scores?.overall != null
+    ? `<span class="pill ${classForScore(overall)}">${pct(overall)}</span>`
+    : '--';
+  document.getElementById('recommendation').textContent = evaluation?.recommendation || '--';
+
+  renderBanner(bundle);
+  renderScores(evaluation?.scores || {});
+  renderTrace(bundle.trace_matrix || []);
+  renderSkills(bundle.skills || []);
+  renderActionability(bundle);
+  renderGating(bundle);
+  renderDiff(bundle);
+}
+
+main();
+</script>
+</body>
+</html>

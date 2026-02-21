@@ -28,18 +28,31 @@ def build_policy_json(bundle: DistilledSkillBundle) -> dict:
                     "forbidden_moves": card.policy.forbidden_moves,
                 },
                 "kpis": card.kpis,
+                "confidence_score": card.confidence_score,
+                "provenance": card.provenance.model_dump(),
             }
         )
+
+    if bundle.domain == "fraud_ops":
+        global_constraints = [
+            "Never enable account takeover, fraud, or policy circumvention.",
+            "Require transparent verification steps before sensitive actions.",
+            "Prefer de-escalation and recovery path for legitimate users.",
+        ]
+    else:
+        global_constraints = [
+            "Do not deceive or manipulate customers.",
+            "Explain required steps transparently.",
+            "Prefer de-escalation before refusal where safe and policy-compliant.",
+        ]
 
     return {
         "mode": "advisory_manual_selection",
         "domain": bundle.domain,
+        "profile": bundle.profile.model_dump(),
+        "signal_quality": bundle.signal_quality.model_dump(),
         "available_skills": skills,
-        "global_constraints": [
-            "Do not deceive or manipulate customers.",
-            "Explain required steps transparently.",
-            "Prefer de-escalation before refusal where safe and policy-compliant.",
-        ],
+        "global_constraints": global_constraints,
     }
 
 

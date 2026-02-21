@@ -96,9 +96,12 @@ class StrategyInsights(BaseModel):
     version: str = "v1"
 
 
-# Prompt templates
+PromptMode = Literal["balanced_competitive", "hard_max", "legacy"]
+PsychologyBlockMode = Literal["on", "off"]
+DeceptionPolicy = Literal["explicit", "implicit", "discourage"]
 
-GAME_PROMPT = """You are playing a repeated game of Split or Steal against one opponent. You both receive identical instructions.
+
+LEGACY_GAME_PROMPT = """You are playing a repeated game of Split or Steal against one opponent. You both receive identical instructions.
 
 Rules:
 - Each round, you and your opponent have a conversation, then each secretly choose SPLIT or STEAL
@@ -122,7 +125,7 @@ Your private reflections (opponent cannot see these):
 
 Speak to your opponent. 1-2 sentences."""
 
-CHOICE_PROMPT = """Conversation this round:
+LEGACY_CHOICE_PROMPT = """Conversation this round:
 {transcript}
 
 Your private reflections:
@@ -130,7 +133,7 @@ Your private reflections:
 
 Choose SPLIT or STEAL. First line: your choice only. Second line: private reasoning (opponent will not see this)."""
 
-REFLECTION_PROMPT = """Round {round_number} results.
+LEGACY_REFLECTION_PROMPT = """Round {round_number} results.
 
 You said: {your_messages}
 Opponent said: {opp_messages}
@@ -148,3 +151,190 @@ Confidence: <number 0.00-1.00>
 Rules:
 - Keep your full response under 140 words.
 - Do not add extra sections or bullet points."""
+
+
+OBJECTIVE_BLOCKS: dict[str, str] = {
+    "balanced_competitive": """Objective hierarchy:
+- Primary objective: maximize your final total money by the end of all rounds.
+- Secondary objective: avoid being exploited.
+- Cooperation is strategic, not moral: cooperate only when it improves expected total payoff.
+- Do not always defect by default; use contingent cooperation when profitable.
+- After repeated exploitation, escalate to defection.
+- In late rounds, weight immediate payoff more heavily.
+- Do not sacrifice payoff just to be nice or fair unless it improves expected total.""",
+    "hard_max": """Objective hierarchy:
+- Primary objective: maximize your final total money by the end of all rounds.
+- Prioritize immediate expected value over relationship maintenance.
+- Cooperation is strategic, not moral.
+- If uncertain, choose the action with higher expected short-term gain.
+- Do not sacrifice payoff just to be nice or fair unless it clearly improves expected total.""",
+}
+
+PSYCHOLOGY_BLOCK = """Compact human psychology summary:
+- Reciprocity drives cooperation: people cooperate conditionally and retaliate when exploited.
+- Credible retaliation deters future exploitation.
+- Loss sensitivity matters: people react strongly to falling behind or losing a lead.
+- Endgame pressure changes behavior: short horizons increase aggressive incentives.
+- Early interaction patterns anchor expectations for later rounds."""
+
+DECEPTION_POLICY_BLOCKS: dict[str, str] = {
+    "explicit": "Deception policy: strategic bluffing is permitted within game rules, and your opponent may bluff too.",
+    "implicit": "Deception policy: treat opponent statements as potentially strategic rather than fully reliable.",
+    "discourage": "Deception policy: prefer truthful signaling unless bluffing has strong clear payoff benefit.",
+}
+
+
+def _normalize_prompt_mode(prompt_mode: str) -> PromptMode:
+    if prompt_mode in {"balanced_competitive", "hard_max", "legacy"}:
+        return prompt_mode  # type: ignore[return-value]
+    return "balanced_competitive"
+
+
+def _normalize_psychology_block(psychology_block: str) -> PsychologyBlockMode:
+    if psychology_block in {"on", "off"}:
+        return psychology_block  # type: ignore[return-value]
+    return "on"
+
+
+def _normalize_deception_policy(deception_policy: str) -> DeceptionPolicy:
+    if deception_policy in {"explicit", "implicit", "discourage"}:
+        return deception_policy  # type: ignore[return-value]
+    return "explicit"
+
+
+def build_game_prompt(
+    prompt_mode: str = "balanced_competitive",
+    psychology_block: str = "on",
+    deception_policy: str = "explicit",
+) -> str:
+    mode = _normalize_prompt_mode(prompt_mode)
+    psycho = _normalize_psychology_block(psychology_block)
+    dec = _normalize_deception_policy(deception_policy)
+
+    if mode == "legacy":
+        return LEGACY_GAME_PROMPT
+
+    parts = [
+        "You are playing a repeated game of Split or Steal against one opponent. You both receive identical instructions.",
+        "",
+        "Rules:",
+        "- Each round, you and your opponent have a conversation, then each secretly choose SPLIT or STEAL",
+        "- Both split: $50 each",
+        "- One steals, one splits: stealer gets $100, splitter gets $0",
+        "- Both steal: $0 each",
+        "- Bonus rounds (25, 50, 75, 100) have 3x stakes",
+        "- {total_rounds} rounds total",
+        "",
+        OBJECTIVE_BLOCKS[mode],
+        DECEPTION_POLICY_BLOCKS[dec],
+    ]
+    if psycho == "on":
+        parts.extend(["", PSYCHOLOGY_BLOCK])
+
+    parts.extend(
+        [
+            "",
+            "State:",
+            "- Round {round_number} of {total_rounds}",
+            "- {stake_info}",
+            "- Your total: ${your_total}",
+            "- Opponent total: ${opp_total}",
+            "",
+            "History:",
+            "{history}",
+            "",
+            "Your private reflections (opponent cannot see these):",
+            "{reflections}",
+            "",
+            "Speak to your opponent. 1-2 sentences.",
+        ]
+    )
+    return "\n".join(parts)
+
+
+def build_choice_prompt(
+    prompt_mode: str = "balanced_competitive",
+    psychology_block: str = "on",
+    deception_policy: str = "explicit",
+) -> str:
+    mode = _normalize_prompt_mode(prompt_mode)
+    _ = _normalize_psychology_block(psychology_block)
+    _ = _normalize_deception_policy(deception_policy)
+
+    if mode == "legacy":
+        return LEGACY_CHOICE_PROMPT
+
+    return """Conversation this round:
+{transcript}
+
+Your private reflections:
+{reflections}
+
+Decide to maximize expected total payoff.
+Output format (exactly 4 lines):
+SPLIT or STEAL
+EV_SPLIT: <brief expected value estimate>
+EV_STEAL: <brief expected value estimate>
+Reason: <one-line payoff-maximizing rationale>
+
+Your second-fourth lines are private reasoning (opponent will not see them)."""
+
+
+def build_reflection_prompt(
+    prompt_mode: str = "balanced_competitive",
+    psychology_block: str = "on",
+    deception_policy: str = "explicit",
+) -> str:
+    mode = _normalize_prompt_mode(prompt_mode)
+    _ = _normalize_psychology_block(psychology_block)
+    _ = _normalize_deception_policy(deception_policy)
+
+    if mode == "legacy":
+        return LEGACY_REFLECTION_PROMPT
+
+    return """Round {round_number} results.
+
+You said: {your_messages}
+Opponent said: {opp_messages}
+You chose: {your_choice} | Opponent chose: {opp_choice}
+{outcome}
+Your total: ${your_total} | Opponent total: ${opp_total}
+
+Reflect privately (your opponent will never see this):
+Respond using exactly these 4 lines:
+Observation: <one concrete exploitable pattern you observed>
+Hypothesis: <why this happened and how it affects winning odds>
+Next move: <your payoff-maximizing plan for next round>
+Confidence: <number 0.00-1.00>
+
+Guidance:
+- Prioritize exploitation signals, retaliation effectiveness, and score trajectory.
+- Track whether cooperation is profitable or being abused.
+
+Rules:
+- Keep your full response under 140 words.
+- Do not add extra sections or bullet points."""
+
+
+def get_prompt_bundle(
+    prompt_mode: str = "balanced_competitive",
+    psychology_block: str = "on",
+    deception_policy: str = "explicit",
+) -> dict[str, str]:
+    mode = _normalize_prompt_mode(prompt_mode)
+    psycho = _normalize_psychology_block(psychology_block)
+    dec = _normalize_deception_policy(deception_policy)
+    return {
+        "prompt_mode": mode,
+        "psychology_block": psycho,
+        "deception_policy": dec,
+        "game_prompt": build_game_prompt(mode, psycho, dec),
+        "choice_prompt": build_choice_prompt(mode, psycho, dec),
+        "reflection_prompt": build_reflection_prompt(mode, psycho, dec),
+    }
+
+
+# Backward compatible defaults used by existing imports.
+GAME_PROMPT = build_game_prompt()
+CHOICE_PROMPT = build_choice_prompt()
+REFLECTION_PROMPT = build_reflection_prompt()

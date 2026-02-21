@@ -32,18 +32,47 @@ async def main():
     parser = argparse.ArgumentParser(description="Run CRUCIBLE")
     parser.add_argument("--rounds", type=int, default=100, help="Number of rounds")
     parser.add_argument("--turns", type=int, default=3, help="Conversation turns per round")
+    parser.add_argument(
+        "--prompt-mode",
+        type=str,
+        choices=["balanced_competitive", "hard_max", "legacy"],
+        default=None,
+        help="Prompt strategy mode",
+    )
+    parser.add_argument(
+        "--psychology-block",
+        type=str,
+        choices=["on", "off"],
+        default=None,
+        help="Include compact human psychology summary",
+    )
+    parser.add_argument(
+        "--deception-policy",
+        type=str,
+        choices=["explicit", "implicit", "discourage"],
+        default=None,
+        help="How directly prompts allow strategic bluffing/deception",
+    )
     args = parser.parse_args()
+
+    prompt_mode = args.prompt_mode or os.environ.get("CRUCIBLE_PROMPT_MODE", "balanced_competitive")
+    psychology_block = args.psychology_block or os.environ.get("CRUCIBLE_PSYCHOLOGY_BLOCK", "on")
+    deception_policy = args.deception_policy or os.environ.get("CRUCIBLE_DECEPTION_POLICY", "explicit")
 
     # Initialize Datadog LLM Observability
     init_all()
 
     print(f"Running CRUCIBLE: {args.rounds} rounds, {args.turns} conversation turns each")
+    print(f"Prompt mode: {prompt_mode} | Psychology block: {psychology_block} | Deception policy: {deception_policy}")
     print("=" * 60)
 
     game_state = await run_game(
         total_rounds=args.rounds,
         conversation_turns=args.turns,
         on_update=on_round_complete,
+        prompt_mode=prompt_mode,
+        psychology_block=psychology_block,
+        deception_policy=deception_policy,
     )
 
     # Compute metrics (with language drift embeddings)

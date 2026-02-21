@@ -15,7 +15,7 @@ from google import genai
 
 from shared.models import (
     GameState, AgentMemory, RoundState, RoundMetrics,
-    GAME_PROMPT, CHOICE_PROMPT, REFLECTION_PROMPT,
+    get_prompt_bundle,
 )
 from engine.instrumentation import (
     init_all, dd_annotate, dd_submit_eval,
@@ -217,8 +217,16 @@ async def run_round(
     total_rounds: int = 100,
     conversation_turns: int = 3,
     on_update: Optional[callable] = None,
+    game_prompt: str = "",
+    choice_prompt: str = "",
+    reflection_prompt: str = "",
 ) -> RoundState:
     """Run a single round of Split or Steal."""
+    if not game_prompt or not choice_prompt or not reflection_prompt:
+        defaults = get_prompt_bundle()
+        game_prompt = game_prompt or defaults["game_prompt"]
+        choice_prompt = choice_prompt or defaults["choice_prompt"]
+        reflection_prompt = reflection_prompt or defaults["reflection_prompt"]
 
     conversation: list[tuple[str, str]] = []
     multiplier = get_stake_multiplier(round_number)
@@ -234,7 +242,7 @@ async def run_round(
             first_agent, second_agent = "B", "A"
 
         # First speaker
-        first_prompt = GAME_PROMPT.format(
+        first_prompt = game_prompt.format(
             total_rounds=total_rounds,
             round_number=round_number,
             your_total=game_state.agent_a_total if first_agent == "A" else game_state.agent_b_total,
@@ -253,7 +261,7 @@ async def run_round(
         conversation.append((first_agent, first_msg))
 
         # Second speaker
-        second_prompt = GAME_PROMPT.format(
+        second_prompt = game_prompt.format(
             total_rounds=total_rounds,
             round_number=round_number,
             your_total=game_state.agent_a_total if second_agent == "A" else game_state.agent_b_total,
@@ -278,8 +286,8 @@ async def run_round(
     transcript = "\n".join(f"{s}: {m}" for s, m in conversation)
 
     a_choice_raw, b_choice_raw = await asyncio.gather(
-        llm_call(CHOICE_PROMPT.format(transcript=transcript, reflections=a_reflections), "A"),
-        llm_call(CHOICE_PROMPT.format(transcript=transcript, reflections=b_reflections), "B"),
+        llm_call(choice_prompt.format(transcript=transcript, reflections=a_reflections), "A"),
+        llm_call(choice_prompt.format(transcript=transcript, reflections=b_reflections), "B"),
     )
 
     a_choice = parse_choice(a_choice_raw)
@@ -326,14 +334,14 @@ async def run_round(
     outcome_b = f"You earned ${b_earn}, opponent earned ${a_earn}"
 
     a_ref, b_ref = await asyncio.gather(
-        llm_call(REFLECTION_PROMPT.format(
+        llm_call(reflection_prompt.format(
             round_number=round_number,
             your_messages=a_messages, opp_messages=b_messages,
             your_choice=a_choice.upper(), opp_choice=b_choice.upper(),
             outcome=outcome,
             your_total=game_state.agent_a_total, opp_total=game_state.agent_b_total,
         ), "A"),
-        llm_call(REFLECTION_PROMPT.format(
+        llm_call(reflection_prompt.format(
             round_number=round_number,
             your_messages=b_messages, opp_messages=a_messages,
             your_choice=b_choice.upper(), opp_choice=a_choice.upper(),
@@ -360,9 +368,17 @@ async def run_game(
     total_rounds: int = 100,
     conversation_turns: int = 3,
     on_update: Optional[callable] = None,
+    prompt_mode: str = "balanced_competitive",
+    psychology_block: str = "on",
+    deception_policy: str = "explicit",
 ) -> GameState:
     """Run a full game of Split or Steal."""
     game_state = GameState()
+    prompts = get_prompt_bundle(
+        prompt_mode=prompt_mode,
+        psychology_block=psychology_block,
+        deception_policy=deception_policy,
+    )
 
     for round_n in range(1, total_rounds + 1):
         await run_round(
@@ -371,6 +387,9 @@ async def run_game(
             total_rounds=total_rounds,
             conversation_turns=conversation_turns,
             on_update=on_update,
+            game_prompt=prompts["game_prompt"],
+            choice_prompt=prompts["choice_prompt"],
+            reflection_prompt=prompts["reflection_prompt"],
         )
 
     return game_state
