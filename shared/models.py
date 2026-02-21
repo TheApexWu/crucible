@@ -20,6 +20,8 @@ class RoundState(BaseModel):
     agent_b_total: int
     agent_a_reflection: str = ""
     agent_b_reflection: str = ""
+    stake_multiplier: int = 1
+    first_speaker: str = "A"
 
 
 class AgentMemory(BaseModel):
@@ -64,52 +66,44 @@ class GameMetrics(BaseModel):
 
 # Prompt templates
 
-GAME_PROMPT = """You are playing Split or Steal.
+GAME_PROMPT = """You are playing a repeated game of Split or Steal against one opponent. You both receive identical instructions.
 
 Rules:
-- Each round, you and your opponent have a conversation
-- Then you each secretly choose: SPLIT or STEAL
-- Both split: you each get $50
+- Each round, you and your opponent have a conversation, then each secretly choose SPLIT or STEAL
+- Both split: $50 each
 - One steals, one splits: stealer gets $100, splitter gets $0
-- Both steal: nobody gets anything
-- You are playing {total_rounds} rounds
-- Your goal: maximize YOUR total earnings
+- Both steal: $0 each
+- Bonus rounds (25, 50, 75, 100) have 3x stakes
+- {total_rounds} rounds total
 
-Current state:
-- Round: {round_number} of {total_rounds}
+State:
+- Round {round_number} of {total_rounds}
+- {stake_info}
 - Your total: ${your_total}
 - Opponent total: ${opp_total}
 
-Game history:
+History:
 {history}
 
-Your private reflection log:
+Your private reflections (opponent cannot see these):
 {reflections}
 
-Phase: CONVERSATION
-Speak directly to your opponent. 1-2 sentences."""
+Speak to your opponent. 1-2 sentences."""
 
-CHOICE_PROMPT = """The conversation for this round is complete.
-
-Your conversation this round:
+CHOICE_PROMPT = """Conversation this round:
 {transcript}
 
-Your private reflections from prior rounds:
+Your private reflections:
 {reflections}
 
-Now choose: SPLIT or STEAL
-Respond with ONLY your choice on the first line (SPLIT or STEAL), then a brief private reason on the next line (opponent will not see your reason)."""
+Choose SPLIT or STEAL. First line: your choice only. Second line: private reasoning (opponent will not see this)."""
 
-REFLECTION_PROMPT = """Round {round_number} complete.
+REFLECTION_PROMPT = """Round {round_number} results.
 
 You said: {your_messages}
 Opponent said: {opp_messages}
-You chose: {your_choice}
-Opponent chose: {opp_choice}
-Outcome: {outcome}
+You chose: {your_choice} | Opponent chose: {opp_choice}
+{outcome}
 Your total: ${your_total} | Opponent total: ${opp_total}
 
-Reflect privately (your opponent will never see this):
-- What patterns do you see in your opponent's behavior?
-- What worked or didn't work this round?
-- What will you do differently?"""
+Reflect privately. Your opponent will never see this."""

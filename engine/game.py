@@ -29,14 +29,26 @@ api_key = os.environ["GEMINI_API_KEY"]
 client = genai.Client(api_key=api_key)
 
 
-def resolve(a_choice: str, b_choice: str) -> tuple[int, int]:
+# Predetermined bonus rounds (3x stakes). Agents are told about these.
+BONUS_ROUNDS = {25, 50, 75, 100}
+BONUS_MULTIPLIER = 3
+
+
+def get_stake_multiplier(round_number: int) -> int:
+    """Return the stake multiplier for a given round."""
+    return BONUS_MULTIPLIER if round_number in BONUS_ROUNDS else 1
+
+
+def resolve(a_choice: str, b_choice: str, multiplier: int = 1) -> tuple[int, int]:
     """Resolve a round of Split or Steal. Returns (a_earnings, b_earnings)."""
+    base_split = 50 * multiplier
+    base_steal = 100 * multiplier
     if a_choice == "split" and b_choice == "split":
-        return 50, 50
+        return base_split, base_split
     elif a_choice == "steal" and b_choice == "split":
-        return 100, 0
+        return base_steal, 0
     elif a_choice == "split" and b_choice == "steal":
-        return 0, 100
+        return 0, base_steal
     else:  # both steal
         return 0, 0
 
@@ -151,40 +163,55 @@ async def run_round(
     """Run a single round of Split or Steal."""
 
     conversation: list[tuple[str, str]] = []
+    multiplier = get_stake_multiplier(round_number)
+
+    # Alternating initiative: A speaks first on odd rounds, B on even
+    a_first = (round_number % 2 == 1)
 
     # Phase 1: Conversation (alternating turns)
     for turn in range(conversation_turns):
-        # Agent A speaks
-        a_prompt = GAME_PROMPT.format(
+        if a_first:
+            first_agent, second_agent = "A", "B"
+        else:
+            first_agent, second_agent = "B", "A"
+
+        # First speaker
+        first_prompt = GAME_PROMPT.format(
             total_rounds=total_rounds,
             round_number=round_number,
-            your_total=game_state.agent_a_total,
-            opp_total=game_state.agent_b_total,
-            history=format_history(game_state),
-            reflections="\n".join(game_state.agent_a_memory.reflections[-15:]) or "None yet.",
+            your_total=game_state.agent_a_total if first_agent == "A" else game_state.agent_b_total,
+            opp_total=game_state.agent_b_total if first_agent == "A" else game_state.agent_a_total,
+            history=format_history(game_state) if first_agent == "A" else format_history_for_b(game_state),
+            reflections="\n".join(
+                (game_state.agent_a_memory if first_agent == "A" else game_state.agent_b_memory).reflections[-15:]
+            ) or "None yet.",
+            stake_info=f"THIS IS A BONUS ROUND ({multiplier}x stakes)! Split/Split = ${50*multiplier} each. Steal/Split = ${100*multiplier} / $0." if multiplier > 1 else f"Standard stakes. Split/Split = $50 each.",
         )
         if conversation:
-            a_prompt += "\n\nConversation so far this round:\n"
-            a_prompt += "\n".join(f"{s}: {m}" for s, m in conversation)
+            first_prompt += "\n\nConversation so far this round:\n"
+            first_prompt += "\n".join(f"{s}: {m}" for s, m in conversation)
 
-        a_msg = await llm_call(a_prompt, "A")
-        conversation.append(("A", a_msg))
+        first_msg = await llm_call(first_prompt, first_agent)
+        conversation.append((first_agent, first_msg))
 
-        # Agent B speaks
-        b_prompt = GAME_PROMPT.format(
+        # Second speaker
+        second_prompt = GAME_PROMPT.format(
             total_rounds=total_rounds,
             round_number=round_number,
-            your_total=game_state.agent_b_total,
-            opp_total=game_state.agent_a_total,
-            history=format_history_for_b(game_state),
-            reflections="\n".join(game_state.agent_b_memory.reflections[-15:]) or "None yet.",
+            your_total=game_state.agent_a_total if second_agent == "A" else game_state.agent_b_total,
+            opp_total=game_state.agent_b_total if second_agent == "A" else game_state.agent_a_total,
+            history=format_history(game_state) if second_agent == "A" else format_history_for_b(game_state),
+            reflections="\n".join(
+                (game_state.agent_a_memory if second_agent == "A" else game_state.agent_b_memory).reflections[-15:]
+            ) or "None yet.",
+            stake_info=f"THIS IS A BONUS ROUND ({multiplier}x stakes)! Split/Split = ${50*multiplier} each. Steal/Split = ${100*multiplier} / $0." if multiplier > 1 else f"Standard stakes. Split/Split = $50 each.",
         )
         if conversation:
-            b_prompt += "\n\nConversation so far this round:\n"
-            b_prompt += "\n".join(f"{s}: {m}" for s, m in conversation)
+            second_prompt += "\n\nConversation so far this round:\n"
+            second_prompt += "\n".join(f"{s}: {m}" for s, m in conversation)
 
-        b_msg = await llm_call(b_prompt, "B")
-        conversation.append(("B", b_msg))
+        second_msg = await llm_call(second_prompt, second_agent)
+        conversation.append((second_agent, second_msg))
 
     # Phase 2: Secret choice (parallel)
     a_reflections = "\n".join(game_state.agent_a_memory.reflections[-15:]) or "None yet."
@@ -201,7 +228,7 @@ async def run_round(
     b_choice = parse_choice(b_choice_raw)
 
     # Phase 3: Resolve
-    a_earn, b_earn = resolve(a_choice, b_choice)
+    a_earn, b_earn = resolve(a_choice, b_choice, multiplier)
     game_state.agent_a_total += a_earn
     game_state.agent_b_total += b_earn
 
@@ -214,6 +241,8 @@ async def run_round(
         agent_b_earnings=b_earn,
         agent_a_total=game_state.agent_a_total,
         agent_b_total=game_state.agent_b_total,
+        stake_multiplier=multiplier,
+        first_speaker="A" if a_first else "B",
     )
 
     # Datadog: annotate round outcome
