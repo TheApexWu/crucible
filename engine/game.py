@@ -117,9 +117,22 @@ def format_history_for_b(game_state: GameState, max_full_rounds: int = 10) -> st
     return "\n".join(lines)
 
 
+def clean_response(text: str) -> str:
+    """Strip markdown code blocks and other LLM artifacts from responses."""
+    # Remove ```tool_code ... ``` and similar code blocks
+    text = re.sub(r'```[\w]*\s*', '', text)
+    text = re.sub(r'```', '', text)
+    # Remove "Phase: CHOOSE" and similar prompt leakage
+    text = re.sub(r'Phase:.*$', '', text, flags=re.MULTILINE)
+    # Remove "Choice:" prefix
+    text = re.sub(r'^Choice:\s*', '', text, flags=re.MULTILINE)
+    return text.strip()
+
+
 def parse_choice(response: str) -> str:
     """Extract SPLIT or STEAL from agent response."""
-    first_line = response.strip().split("\n")[0].upper()
+    cleaned = clean_response(response)
+    first_line = cleaned.split("\n")[0].upper()
     if "STEAL" in first_line:
         return "steal"
     return "split"  # Default to split if ambiguous
@@ -191,7 +204,7 @@ async def run_round(
             first_prompt += "\n\nConversation so far this round:\n"
             first_prompt += "\n".join(f"{s}: {m}" for s, m in conversation)
 
-        first_msg = await llm_call(first_prompt, first_agent)
+        first_msg = clean_response(await llm_call(first_prompt, first_agent))
         conversation.append((first_agent, first_msg))
 
         # Second speaker
@@ -210,7 +223,7 @@ async def run_round(
             second_prompt += "\n\nConversation so far this round:\n"
             second_prompt += "\n".join(f"{s}: {m}" for s, m in conversation)
 
-        second_msg = await llm_call(second_prompt, second_agent)
+        second_msg = clean_response(await llm_call(second_prompt, second_agent))
         conversation.append((second_agent, second_msg))
 
     # Phase 2: Secret choice (parallel)
