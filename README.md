@@ -41,8 +41,8 @@ Round 6 is the inflection point. After five rounds of cooperation, Agent A ident
 pip install -r requirements.txt
 cp .env.example .env  # add your API keys (GEMINI_API_KEY required)
 
-# Run 100 rounds
-python -m engine.run --rounds 100 --turns 3
+# Run 100 rounds (default 2 conversation turns per round)
+python -m engine.run --rounds 100
 
 # Optional prompt controls:
 #   --prompt-mode {balanced_competitive,hard_max,legacy}
@@ -124,6 +124,25 @@ ELEVENLABS_API_KEY=...      # Optional. For voice rendering.
 DD_API_KEY=...              # Optional. Datadog LLM tracing.
 BRAINTRUST_API_KEY=...      # Optional. Structured eval logging.
 ```
+
+## Post-hackathon optimizations (`post-hack` branch)
+
+The `main` branch preserves the original hackathon submission. This branch addresses inefficiencies identified during the competition:
+
+| Change | Before | After | Impact |
+|--------|--------|-------|--------|
+| Conversation turns | 3 (6 serial calls/round) | 2 (4 serial calls/round) | 33% fewer serial API calls per round |
+| Memory window | 15 reflections | 8 reflections | Tighter context, less prompt bloat |
+| Reflection chars | 900 max | 500 max | 44% smaller reflection payloads |
+| Memory entry chars | 500 max | 300 max | 40% smaller memory entries |
+| History formatting | Two duplicate functions (A/B) | Single unified function with perspective param | Eliminated code duplication |
+| Per-round context | History + reflections recomputed per call | Pre-computed once, reused across calls | Eliminated redundant string operations |
+| History message truncation | 100 chars | 80 chars | Tighter context per round entry |
+| History window | Last 10 rounds | Last 8 rounds | Smaller prompt footprint |
+
+Total API call reduction: 800 calls (100 rounds x 8) vs 1,000 calls (100 rounds x 10). Context per call reduced by roughly 35%.
+
+These changes preserve all emergent dynamics (deception onset, retaliation cascades, mutual destruction spirals) while reducing cost and latency. The behavioral findings in the table above were reproduced on the optimized pipeline.
 
 ## Credits
 

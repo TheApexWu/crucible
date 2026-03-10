@@ -31,7 +31,7 @@ def on_round_complete(round_state):
 async def main():
     parser = argparse.ArgumentParser(description="Run CRUCIBLE")
     parser.add_argument("--rounds", type=int, default=100, help="Number of rounds")
-    parser.add_argument("--turns", type=int, default=3, help="Conversation turns per round")
+    parser.add_argument("--turns", type=int, default=2, help="Conversation turns per round")
     parser.add_argument(
         "--prompt-mode",
         type=str,
