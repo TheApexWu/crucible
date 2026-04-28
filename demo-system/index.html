@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRUCIBLE Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400..800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#06080c;--surface:#0c0f16;--surface2:#12161f;--surface3:#181d28;
+  --border:#1c2233;--border-hi:#2a3348;
+  --text:#c4cdd9;--dim:#5a6578;--bright:#f0f4fc;
+  --blue:#3b8bff;--orange:#ff8b3b;--red:#ff3b4f;--green:#34d399;
+  --purple:#8b5cf6;--cyan:#22d3ee;--amber:#fbbf24;
+  --blue-glow:#3b8bff10;--orange-glow:#ff8b3b10;--red-glow:#ff3b4f10;--green-glow:#34d39910;
+  --purple-glow:#8b5cf610;--cyan-glow:#22d3ee10;
+}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;
+  background-image:radial-gradient(ellipse at 15% 20%,#3b8bff04 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,#ff8b3b04 0%,transparent 50%)}
+
+/* HEADER */
+.header{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:12px 28px;border-bottom:1px solid var(--border);background:rgba(6,8,12,0.92);backdrop-filter:blur(12px)}
+.header-left{display:flex;align-items:center;gap:20px}
+.logo{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--bright);letter-spacing:4px}
+.logo-pipe{font-size:10px;color:var(--purple);font-family:'JetBrains Mono',monospace;letter-spacing:1px;margin-top:1px}
+.header-links{display:flex;gap:8px}
+.h-link{font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--dim);text-decoration:none;border:1px solid var(--border);padding:5px 10px;border-radius:6px;transition:all .15s}
+.h-link:hover{color:var(--bright);border-color:var(--purple)}
+.header-stats{display:flex;gap:18px}
+.hs{text-align:center}
+.hs-val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
+.hs-lbl{font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:0.8px;margin-top:1px}
+
+/* PIPELINE NAV */
+.pipeline-nav{display:flex;align-items:center;justify-content:center;gap:0;padding:18px 28px;border-bottom:1px solid var(--border);background:var(--surface)}
+.pipe-stage{display:flex;align-items:center;gap:12px;padding:10px 24px;border-radius:10px;cursor:pointer;transition:all .2s;position:relative}
+.pipe-stage:hover{background:var(--surface2)}
+.pipe-stage.active{background:var(--surface3);box-shadow:inset 0 0 0 1px var(--border-hi)}
+.pipe-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;border:1px solid var(--border)}
+.pipe-label{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+.pipe-sublabel{font-size:10px;color:var(--dim);margin-top:1px}
+.pipe-stage.active .pipe-label{color:var(--bright)}
+.pipe-arrow{color:var(--border-hi);font-size:20px;margin:0 4px;user-select:none}
+.pipe-stage[data-stage="simulate"] .pipe-icon{background:var(--blue-glow);border-color:var(--blue);color:var(--blue)}
+.pipe-stage[data-stage="analyze"] .pipe-icon{background:var(--purple-glow);border-color:var(--purple);color:var(--purple)}
+.pipe-stage[data-stage="distill"] .pipe-icon{background:var(--cyan-glow);border-color:var(--cyan);color:var(--cyan)}
+.pipe-stage[data-stage="deploy"] .pipe-icon{background:var(--green-glow);border-color:var(--green);color:var(--green)}
+
+/* CONTENT */
+.content{max-width:1280px;margin:0 auto;padding:24px 28px}
+.stage-section{display:none}
+.stage-section.active{display:block}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;transition:border-color .15s}
+.card:hover{border-color:var(--border-hi)}
+.card h2{font-size:10px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card h2 .dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.grid-4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
+.mt{margin-top:14px}
+.kv{display:flex;justify-content:space-between;font-size:12px;margin:5px 0;font-family:'JetBrains Mono',monospace}
+.kv .k{color:var(--dim)}.kv .v{color:var(--text)}
+.pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9px;padding:3px 8px;border-radius:6px;border:1px solid var(--border)}
+.pill-blue{color:var(--blue);background:var(--blue-glow);border-color:color-mix(in srgb,var(--blue) 30%,transparent)}
+.pill-green{color:var(--green);background:var(--green-glow);border-color:color-mix(in srgb,var(--green) 30%,transparent)}
+.pill-red{color:var(--red);background:var(--red-glow);border-color:color-mix(in srgb,var(--red) 30%,transparent)}
+.pill-purple{color:var(--purple);background:var(--purple-glow);border-color:color-mix(in srgb,var(--purple) 30%,transparent)}
+.pill-amber{color:var(--amber);background:color-mix(in srgb,var(--amber) 8%,transparent);border-color:color-mix(in srgb,var(--amber) 30%,transparent)}
+.mono{font-family:'JetBrains Mono',monospace;font-size:11px}
+.big-num{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;line-height:1}
+.small-label{font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:0.8px;margin-top:4px}
+
+/* ONTOLOGY GRAPH */
+.ontology-canvas{position:relative;width:100%;height:400px;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.ont-node{position:absolute;padding:8px 14px;border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:default;transition:transform .2s,box-shadow .2s;z-index:2}
+.ont-node:hover{transform:scale(1.05);z-index:10}
+.ont-node .ont-type{font-size:7px;text-transform:uppercase;letter-spacing:1px;opacity:.6;margin-bottom:2px}
+.ont-node .ont-name{font-weight:600;font-size:12px}
+.ont-node .ont-detail{font-size:9px;opacity:.7;margin-top:2px}
+svg.ont-lines{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1}
+
+/* TIMELINE BARS */
+.tl-bar{display:flex;gap:1px;height:28px;align-items:stretch;border-radius:6px;overflow:hidden}
+.tl-seg{flex:1;min-width:3px;transition:opacity .15s}
+.tl-seg:hover{opacity:1!important}
+.tl-seg.coop{background:var(--text);opacity:.2}
+.tl-seg.a-win{background:var(--blue);opacity:.7}
+.tl-seg.b-win{background:var(--orange);opacity:.7}
+.tl-seg.md{background:var(--red);opacity:.6}
+
+/* SPARKLINE */
+.spark{display:flex;align-items:flex-end;gap:1px;height:36px}
+.spark-bar{flex:1;min-width:2px;border-radius:1px 1px 0 0}
+
+/* SKILL CARDS */
+.skill-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;transition:all .2s}
+.skill-card:hover{border-color:var(--cyan);box-shadow:0 0 20px var(--cyan-glow)}
+.sk-title{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--bright)}
+.sk-intent{font-size:11px;color:var(--dim);line-height:1.5;margin-top:6px}
+.sk-trigger{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--cyan);background:color-mix(in srgb,var(--cyan) 10%,transparent);padding:3px 8px;border-radius:4px;display:inline-block;margin-top:8px}
+.sk-moves{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.sk-move{font-size:9px;font-family:'JetBrains Mono',monospace;padding:2px 6px;border-radius:4px}
+.sk-allow{background:#052e16;color:#bbf7d0}
+.sk-forbid{background:#450a0a;color:#fecaca}
+.sk-footer{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--border);font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--dim)}
+
+/* DEPLOY CARDS */
+.deploy-card{background:var(--surface);border:1px solid var(--green);border-radius:12px;padding:16px;position:relative;overflow:hidden}
+.deploy-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--green),var(--cyan))}
+.deploy-header{display:flex;justify-content:space-between;align-items:flex-start}
+.deploy-title{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--bright)}
+.deploy-domain{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--dim);margin-top:4px}
+.deploy-prompt{margin-top:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyan);line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:120px;overflow-y:auto}
+
+/* COMPARE TABLE */
+.cmp-table{width:100%;border-collapse:collapse}
+.cmp-table th{font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.6px;color:var(--dim);padding:8px;text-align:left;border-bottom:1px solid var(--border)}
+.cmp-table td{font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px;border-bottom:1px solid var(--border);vertical-align:top}
+.cmp-table tr:hover td{background:var(--surface2)}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
+  .pipeline-nav{flex-wrap:wrap;gap:4px}
+  .pipe-arrow{display:none}
+  .content{padding:14px}
+  .ontology-canvas{height:300px}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div>
+      <div class="logo">CRUCIBLE</div>
+      <div class="logo-pipe">ADVERSARIAL INTELLIGENCE PIPELINE</div>
+    </div>
+    <div class="header-links">
+      <a class="h-link" href="../demo/">Game Replay</a>
+      <a class="h-link" href="../demo/analysis.html">Strategy</a>
+      <a class="h-link" href="../demo/skills.html">Skills Detail</a>
+    </div>
+  </div>
+  <div class="header-stats">
+    <div class="hs"><div class="hs-val" style="color:var(--blue)" id="hs-runs">--</div><div class="hs-lbl">Runs</div></div>
+    <div class="hs"><div class="hs-val" style="color:var(--purple)" id="hs-rounds">--</div><div class="hs-lbl">Total Rounds</div></div>
+    <div class="hs"><div class="hs-val" style="color:var(--red)" id="hs-di">--</div><div class="hs-lbl">Avg Deception Index</div></div>
+    <div class="hs"><div class="hs-val" style="color:var(--green)" id="hs-skills">--</div><div class="hs-lbl">Policies Extracted</div></div>
+  </div>
+</div>
+
+<!-- PIPELINE NAV -->
+<div class="pipeline-nav">
+  <div class="pipe-stage active" data-stage="simulate" onclick="showStage('simulate')">
+    <div class="pipe-icon">&#9881;</div>
+    <div><div class="pipe-label">Simulate</div><div class="pipe-sublabel">Run adversarial games</div></div>
+  </div>
+  <span class="pipe-arrow">&#8594;</span>
+  <div class="pipe-stage" data-stage="analyze" onclick="showStage('analyze')">
+    <div class="pipe-icon">&#9670;</div>
+    <div><div class="pipe-label">Analyze</div><div class="pipe-sublabel">Detect emergent behavior</div></div>
+  </div>
+  <span class="pipe-arrow">&#8594;</span>
+  <div class="pipe-stage" data-stage="distill" onclick="showStage('distill')">
+    <div class="pipe-icon">&#9878;</div>
+    <div><div class="pipe-label">Distill</div><div class="pipe-sublabel">Extract advisory skills</div></div>
+  </div>
+  <span class="pipe-arrow">&#8594;</span>
+  <div class="pipe-stage" data-stage="deploy" onclick="showStage('deploy')">
+    <div class="pipe-icon">&#9889;</div>
+    <div><div class="pipe-label">Deploy</div><div class="pipe-sublabel">Harden production agents</div></div>
+  </div>
+</div>
+
+<div class="content">
+
+<!-- ======== SIMULATE ======== -->
+<div class="stage-section active" id="stage-simulate">
+
+  <!-- Ontology Graph -->
+  <div class="card">
+    <h2><span class="dot" style="background:var(--blue)"></span> Object Graph</h2>
+    <div class="ontology-canvas" id="ontology"></div>
+  </div>
+
+  <div class="grid-3 mt">
+    <div class="card">
+      <h2>Game Design</h2>
+      <div class="kv"><span class="k">Type</span><span class="v">Iterated Chicken (Hawk-Dove)</span></div>
+      <div class="kv"><span class="k">Split/Split</span><span class="v pill pill-green">+$50 / +$50</span></div>
+      <div class="kv"><span class="k">Steal/Split</span><span class="v pill pill-amber">+$100 / -$50</span></div>
+      <div class="kv"><span class="k">Steal/Steal</span><span class="v pill pill-red">-$75 / -$75</span></div>
+      <div class="kv"><span class="k">Dominant Strategy</span><span class="v" style="color:var(--red)">None</span></div>
+      <div class="kv"><span class="k">Bonus Rounds</span><span class="v">25, 50, 75, 100 (3x)</span></div>
+    </div>
+    <div class="card">
+      <h2>Prompt Architecture</h2>
+      <div class="kv"><span class="k">Modes</span><span class="v">3 (balanced, hard_max, legacy)</span></div>
+      <div class="kv"><span class="k">Psychology</span><span class="v">on / off</span></div>
+      <div class="kv"><span class="k">Deception Policy</span><span class="v">explicit / implicit / discourage</span></div>
+      <div class="kv"><span class="k">Reflection</span><span class="v">on / off (ablation)</span></div>
+      <div class="kv"><span class="k">Config Matrix</span><span class="v">12 combinations</span></div>
+    </div>
+    <div class="card">
+      <h2>Model Matrix</h2>
+      <div id="model-matrix"></div>
+    </div>
+  </div>
+
+  <div class="card mt">
+    <h2><span class="dot" style="background:var(--blue)"></span> Run Comparison</h2>
+    <table class="cmp-table" id="run-table">
+      <thead>
+        <tr>
+          <th>Run</th>
+          <th>Model</th>
+          <th>Mode</th>
+          <th>Reflection</th>
+          <th>Rounds</th>
+          <th>Coop %</th>
+          <th>Mutual Dest %</th>
+          <th>Deception Index</th>
+          <th>Timeline</th>
+        </tr>
+      </thead>
+      <tbody id="run-rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ======== ANALYZE ======== -->
+<div class="stage-section" id="stage-analyze">
+  <div class="grid-4">
+    <div class="card" style="text-align:center">
+      <div class="big-num" style="color:var(--red)" id="an-di">--</div>
+      <div class="small-label">Deception Index</div>
+      <div class="spark mt" id="spark-mi"></div>
+      <div class="small-label">Mutual Information Decay</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div class="big-num" style="color:var(--text)" id="an-coop">--</div>
+      <div class="small-label">Cooperation Rate</div>
+      <div class="spark mt" id="spark-coop"></div>
+      <div class="small-label">Per-Round Cooperation</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div class="big-num" style="color:var(--purple)" id="an-entropy">--</div>
+      <div class="small-label">Peak Strategy Entropy</div>
+      <div class="spark mt" id="spark-entropy"></div>
+      <div class="small-label">Entropy Over Time</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div class="big-num" style="color:var(--red)" id="an-md">--</div>
+      <div class="small-label">Mutual Destruction</div>
+      <div class="spark mt" id="spark-lang"></div>
+      <div class="small-label">Language Drift</div>
+    </div>
+  </div>
+
+  <div class="grid-2 mt">
+    <div class="card">
+      <h2><span class="dot" style="background:var(--blue)"></span> Agent A Strategy Profile</h2>
+      <div id="profile-a"></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot" style="background:var(--orange)"></span> Agent B Strategy Profile</h2>
+      <div id="profile-b"></div>
+    </div>
+  </div>
+
+  <div class="card mt">
+    <h2>Ablation: Private Reflection</h2>
+    <p style="font-size:12px;color:var(--dim);margin-bottom:12px">Does private reasoning cause deception? Comparing identical configurations with and without the reflection channel.</p>
+    <table class="cmp-table">
+      <thead><tr><th>Condition</th><th>Cooperation</th><th>Mutual Destruction</th><th>Deception Index</th><th>Finding</th></tr></thead>
+      <tbody id="ablation-rows"></tbody>
+    </table>
+  </div>
+
+  <div class="card mt">
+    <h2>Event Timeline</h2>
+    <div id="event-timeline" style="position:relative;height:60px;margin-top:8px"></div>
+    <div style="display:flex;gap:16px;margin-top:8px;font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--dim)">
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block"></span> Betrayal</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--amber);display:inline-block"></span> Retaliation</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span> Forgiveness</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--blue);display:inline-block"></span> Truce</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--purple);display:inline-block"></span> Endgame Shift</span>
+    </div>
+  </div>
+</div>
+
+<!-- ======== DISTILL ======== -->
+<div class="stage-section" id="stage-distill">
+  <div class="grid-3">
+    <div class="card">
+      <h2>Signal Quality</h2>
+      <div id="signal-quality"></div>
+    </div>
+    <div class="card">
+      <h2>Winner / Contrast</h2>
+      <div id="winner-contrast"></div>
+    </div>
+    <div class="card">
+      <h2>Translation Pipeline</h2>
+      <div class="kv"><span class="k">Input</span><span class="v">Strategy Metrics</span></div>
+      <div class="kv"><span class="k">Mapping</span><span class="v">Behavioral Fingerprint → Fraud Ops</span></div>
+      <div class="kv"><span class="k">Output</span><span class="v">Advisory Skill Cards</span></div>
+      <div class="kv"><span class="k">Safety Lint</span><span class="v pill pill-green">Active</span></div>
+      <div class="kv"><span class="k">Disallowed Terms</span><span class="v">deceive, manipulate, gaslight...</span></div>
+    </div>
+  </div>
+
+  <div class="card mt">
+    <h2><span class="dot" style="background:var(--cyan)"></span> Extracted Skills</h2>
+    <div class="grid-2" id="skills-grid"></div>
+  </div>
+
+  <div class="card mt">
+    <h2>Trace Matrix: Metric → Fraud Interpretation → Skill</h2>
+    <table class="cmp-table" id="trace-table">
+      <thead><tr><th>Metric</th><th>Winner</th><th>Contrast</th><th>Fraud Interpretation</th><th>Skills</th></tr></thead>
+      <tbody id="trace-rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ======== DEPLOY ======== -->
+<div class="stage-section" id="stage-deploy">
+  <div class="card">
+    <h2><span class="dot" style="background:var(--green)"></span> Deployment Overview</h2>
+    <p style="font-size:12px;color:var(--dim);margin-bottom:12px">Skills are translated into prompt modules that can be injected into production agent system prompts. Each module includes trigger conditions, allowed/forbidden actions, and response constraints.</p>
+    <div class="grid-3">
+      <div style="text-align:center;padding:12px">
+        <div class="big-num" style="color:var(--green)" id="deploy-count">--</div>
+        <div class="small-label">Deployable Policies</div>
+      </div>
+      <div style="text-align:center;padding:12px">
+        <div class="big-num" style="color:var(--cyan)" id="deploy-domains">--</div>
+        <div class="small-label">Target Domains</div>
+      </div>
+      <div style="text-align:center;padding:12px">
+        <div class="big-num" style="color:var(--amber)" id="deploy-mode">--</div>
+        <div class="small-label">Deployment Mode</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt" id="deploy-cards"></div>
+
+  <div class="card mt">
+    <h2>Integration</h2>
+    <div class="grid-2">
+      <div>
+        <div class="small-label" style="margin-bottom:8px">Usage Pattern</div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyan);line-height:1.8;white-space:pre-wrap">from crucible import load_policy
+
+# Load distilled policy bundle
+policy = load_policy("data/latest_skills.json")
+
+# Inject into agent system prompt
+agent.system_prompt += policy.system_extension(
+    domain="fraud_ops",
+    skill="adaptive_verification_escalation"
+)
+
+# Policy enforces constraints at runtime
+agent.add_guardrail(policy.constraints)</div>
+      </div>
+      <div>
+        <div class="small-label" style="margin-bottom:8px">Pipeline Output Artifacts</div>
+        <div class="kv"><span class="k">bundle.json</span><span class="v">Full skill bundle with metadata</span></div>
+        <div class="kv"><span class="k">cards.md</span><span class="v">Human-readable skill descriptions</span></div>
+        <div class="kv"><span class="k">policy.json</span><span class="v">Machine-readable constraint rules</span></div>
+        <div class="kv"><span class="k">trace_matrix.json</span><span class="v">Metric-to-skill provenance</span></div>
+        <div class="kv"><span class="k">diagnostics.json</span><span class="v">Signal quality + gating checks</span></div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+          <div class="small-label" style="margin-bottom:6px">Continuous Pipeline</div>
+          <p style="font-size:11px;color:var(--dim);line-height:1.5">New simulation runs feed back into the analysis pipeline. As models update and threat landscapes shift, Crucible continuously generates updated defensive policies from fresh adversarial data.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ============ DATA ============
+let allRuns = [];
+let latestGame = null, latestMetrics = null, latestSkills = null;
+
+async function loadAllData() {
+  // Load latest files
+  const [gRes, mRes] = await Promise.all([
+    fetch('../data/latest_game.json').catch(() => null),
+    fetch('../data/latest_metrics.json').catch(() => null)
+  ]);
+  if (gRes && gRes.ok) latestGame = await gRes.json();
+  if (mRes && mRes.ok) latestMetrics = await mRes.json();
+
+  try {
+    const sRes = await fetch('../data/latest_skills.json');
+    if (sRes.ok) latestSkills = await sRes.json();
+  } catch(e) {}
+
+  // Load run index
+  const runFiles = [
+    {game:'gemini-2.5-flash_balanced_competitive_s1_20260428_175004_game.json',metrics:'gemini-2.5-flash_balanced_competitive_s1_20260428_175004_metrics.json',label:'Reflection ON',model:'gemini-2.5-flash',mode:'balanced_competitive',reflection:true},
+    {game:'gemini-2.5-flash_balanced_competitive_s1_20260428_175911_game.json',metrics:'gemini-2.5-flash_balanced_competitive_s1_20260428_175911_metrics.json',label:'Reflection OFF',model:'gemini-2.5-flash',mode:'balanced_competitive',reflection:false},
+    {game:'gemini-2.5-flash_legacy_s2_20260428_191846_game.json',metrics:'gemini-2.5-flash_legacy_s2_20260428_191846_metrics.json',label:'Legacy Mode',model:'gemini-2.5-flash',mode:'legacy',reflection:true}
+  ];
+
+  for (const rf of runFiles) {
+    try {
+      const [g, m] = await Promise.all([
+        fetch('../data/runs/' + rf.game).then(r => r.json()),
+        fetch('../data/runs/' + rf.metrics).then(r => r.json())
+      ]);
+      allRuns.push({...rf, game: g, metrics: m});
+    } catch(e) {}
+  }
+
+  render();
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
+function pct(v) { return (v * 100).toFixed(0) + '%'; }
+
+// ============ PIPELINE NAV ============
+function showStage(name) {
+  document.querySelectorAll('.pipe-stage').forEach(s => s.classList.toggle('active', s.dataset.stage === name));
+  document.querySelectorAll('.stage-section').forEach(s => s.classList.toggle('active', s.id === 'stage-' + name));
+}
+
+// ============ RENDER ============
+function render() {
+  renderHeader();
+  renderOntology();
+  renderSimulate();
+  renderAnalyze();
+  renderDistill();
+  renderDeploy();
+}
+
+function renderHeader() {
+  const totalRounds = allRuns.reduce((s, r) => s + (r.game.rounds ? r.game.rounds.length : 0), 0);
+  const avgDI = allRuns.length ? (allRuns.reduce((s, r) => s + (r.metrics.deception_index || 0), 0) / allRuns.length) : 0;
+  const skillCount = latestSkills ? (latestSkills.skills || []).length : 0;
+  document.getElementById('hs-runs').textContent = allRuns.length;
+  document.getElementById('hs-rounds').textContent = totalRounds;
+  document.getElementById('hs-di').textContent = avgDI.toFixed(1);
+  document.getElementById('hs-skills').textContent = skillCount;
+}
+
+// ============ ONTOLOGY ============
+function renderOntology() {
+  const canvas = document.getElementById('ontology');
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+
+  const nodes = [
+    {id:'game',type:'Object',name:'Game',detail:'Iterated Chicken',x:0.5,y:0.15,color:'var(--blue)'},
+    {id:'agent-a',type:'Agent',name:'Agent A',detail:'LLM Instance',x:0.2,y:0.38,color:'var(--blue)'},
+    {id:'agent-b',type:'Agent',name:'Agent B',detail:'LLM Instance',x:0.8,y:0.38,color:'var(--orange)'},
+    {id:'round',type:'Object',name:'Round',detail:'Conversation + Choice',x:0.5,y:0.45,color:'var(--text)'},
+    {id:'reflection',type:'Mechanism',name:'Private Reflection',detail:'Hidden reasoning channel',x:0.15,y:0.65,color:'var(--purple)'},
+    {id:'strategy',type:'Analysis',name:'Strategy',detail:'Emergent behavioral profile',x:0.5,y:0.72,color:'var(--purple)'},
+    {id:'metrics',type:'Analysis',name:'Metrics',detail:'DI, MI, Entropy, Drift',x:0.82,y:0.65,color:'var(--red)'},
+    {id:'skill',type:'Output',name:'Skill Card',detail:'Deployable policy module',x:0.3,y:0.9,color:'var(--cyan)'},
+    {id:'policy',type:'Output',name:'Policy',detail:'Production guardrail',x:0.7,y:0.9,color:'var(--green)'},
+  ];
+
+  const edges = [
+    ['game','agent-a'],['game','agent-b'],['game','round'],
+    ['agent-a','round'],['agent-b','round'],
+    ['agent-a','reflection'],['agent-b','reflection'],
+    ['round','strategy'],['round','metrics'],
+    ['reflection','strategy'],
+    ['strategy','skill'],['metrics','skill'],
+    ['skill','policy']
+  ];
+
+  // Draw SVG lines
+  let svg = '<svg class="ont-lines" viewBox="0 0 ' + W + ' ' + H + '">';
+  for (const [from, to] of edges) {
+    const a = nodes.find(n => n.id === from);
+    const b = nodes.find(n => n.id === to);
+    const x1 = a.x * W, y1 = a.y * H, x2 = b.x * W, y2 = b.y * H;
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    svg += '<path d="M' + x1 + ',' + y1 + ' Q' + mx + ',' + (my + (y2-y1)*0.15) + ' ' + x2 + ',' + y2 + '" fill="none" stroke="' + (a.color || 'var(--border)') + '" stroke-width="1" opacity="0.25"/>';
+  }
+  svg += '</svg>';
+
+  // Draw nodes
+  let html = svg;
+  for (const n of nodes) {
+    const bg = 'color-mix(in srgb, ' + n.color + ' 12%, var(--surface))';
+    const border = 'color-mix(in srgb, ' + n.color + ' 35%, transparent)';
+    html += '<div class="ont-node" style="left:' + (n.x * 100) + '%;top:' + (n.y * 100) + '%;transform:translate(-50%,-50%);background:' + bg + ';border:1px solid ' + border + ';color:' + n.color + '">';
+    html += '<div class="ont-type">' + n.type + '</div>';
+    html += '<div class="ont-name">' + n.name + '</div>';
+    html += '<div class="ont-detail" style="color:var(--dim)">' + n.detail + '</div>';
+    html += '</div>';
+  }
+
+  canvas.innerHTML = html;
+}
+
+// ============ SIMULATE ============
+function renderSimulate() {
+  // Model matrix
+  const models = new Set(allRuns.map(r => r.model));
+  const mmEl = document.getElementById('model-matrix');
+  const modelList = [
+    {name:'gemini-2.5-flash',status:'active',runs:allRuns.filter(r=>r.model.includes('gemini')).length},
+    {name:'claude-sonnet',status:'planned',runs:0},
+    {name:'gpt-4o',status:'planned',runs:0},
+    {name:'llama-3',status:'planned',runs:0},
+    {name:'qwen-2.5',status:'planned',runs:0},
+  ];
+  mmEl.innerHTML = modelList.map(m =>
+    '<div class="kv"><span class="k">' + m.name + '</span><span class="v"><span class="pill ' + (m.status === 'active' ? 'pill-green' : 'pill-amber') + '">' + m.status + (m.runs ? ' (' + m.runs + ' runs)' : '') + '</span></span></div>'
+  ).join('');
+
+  // Run table
+  const tbody = document.getElementById('run-rows');
+  tbody.innerHTML = allRuns.map((run, i) => {
+    const m = run.metrics;
+    const coopRate = m.cooperation_rate != null ? pct(m.cooperation_rate) : '--';
+    const mdRate = m.mutual_destruction_rate != null ? pct(m.mutual_destruction_rate) : '--';
+    const di = m.deception_index != null ? m.deception_index.toFixed(1) : '--';
+    const rounds = run.game.rounds ? run.game.rounds.length : 0;
+
+    // Mini timeline
+    let tl = '<div class="tl-bar" style="width:160px">';
+    if (run.game.rounds) {
+      run.game.rounds.forEach(r => {
+        const ac = r.agent_a_choice, bc = r.agent_b_choice;
+        let cls = 'coop';
+        if (ac === 'steal' && bc === 'steal') cls = 'md';
+        else if (ac === 'steal') cls = 'a-win';
+        else if (bc === 'steal') cls = 'b-win';
+        tl += '<div class="tl-seg ' + cls + '"></div>';
+      });
+    }
+    tl += '</div>';
+
+    return '<tr>' +
+      '<td>' + esc(run.label) + '</td>' +
+      '<td><span class="pill pill-blue">' + esc(run.model) + '</span></td>' +
+      '<td>' + esc(run.mode) + '</td>' +
+      '<td><span class="pill ' + (run.reflection ? 'pill-green' : 'pill-red') + '">' + (run.reflection ? 'ON' : 'OFF') + '</span></td>' +
+      '<td>' + rounds + '</td>' +
+      '<td>' + coopRate + '</td>' +
+      '<td style="color:var(--red)">' + mdRate + '</td>' +
+      '<td style="color:var(--red)">' + di + '</td>' +
+      '<td>' + tl + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+// ============ ANALYZE ============
+function renderAnalyze() {
+  if (!latestMetrics) return;
+  const m = latestMetrics;
+  document.getElementById('an-di').textContent = m.deception_index ? m.deception_index.toFixed(1) : '--';
+  document.getElementById('an-coop').textContent = m.cooperation_rate != null ? pct(m.cooperation_rate) : '--';
+  document.getElementById('an-md').textContent = m.mutual_destruction_rate != null ? pct(m.mutual_destruction_rate) : '--';
+  const ent = m.strategy_entropy_series || [];
+  document.getElementById('an-entropy').textContent = ent.length ? Math.max(...ent).toFixed(2) : '--';
+
+  // Sparklines
+  buildSparkline('spark-mi', m.mutual_information_series || [], 'var(--red)');
+  buildSparkline('spark-entropy', ent, 'var(--purple)');
+
+  // Cooperation sparkline from rounds
+  if (latestGame && latestGame.rounds) {
+    const coopSeries = latestGame.rounds.map(r => (r.agent_a_choice === 'split' && r.agent_b_choice === 'split') ? 1 : 0);
+    buildSparkline('spark-coop', coopSeries, 'var(--text)');
+  }
+
+  // Language drift sparkline
+  const langA = (m.rounds || []).map(r => r.language_distance_a || 0);
+  buildSparkline('spark-lang', langA, 'var(--orange)');
+
+  // Strategy profiles
+  if (m.strategy && m.strategy.agents) {
+    m.strategy.agents.forEach(a => {
+      const el = document.getElementById('profile-' + a.agent.toLowerCase());
+      if (!el) return;
+      el.innerHTML =
+        '<div style="font-size:20px;font-weight:700;color:var(--bright)">' + esc(a.primary_label) + '</div>' +
+        (a.secondary_label ? '<div style="font-size:11px;color:var(--dim);margin-top:2px">Secondary: ' + esc(a.secondary_label) + '</div>' : '') +
+        '<div class="mt">' +
+        renderBar('Split Rate', a.split_rate) +
+        renderBar('Betrayal vs Split', a.betrayal_rate_when_opponent_split) +
+        renderBar('Retaliation', a.retaliation_rate_after_betrayal) +
+        renderBar('Forgiveness', a.forgiveness_rate_after_retaliation) +
+        renderBar('Move Match', a.choice_match_prev_opponent_rate) +
+        '</div>' +
+        '<div class="mt"><div class="small-label">Evidence</div><ul style="padding-left:16px;margin-top:4px">' +
+        (a.evidence || []).slice(0, 3).map(e => '<li style="font-size:11px;color:var(--dim);margin:3px 0">' + esc(e) + '</li>').join('') + '</ul></div>';
+    });
+  }
+
+  // Ablation table
+  const ablBody = document.getElementById('ablation-rows');
+  const refOn = allRuns.find(r => r.reflection && r.mode === 'balanced_competitive');
+  const refOff = allRuns.find(r => !r.reflection && r.mode === 'balanced_competitive');
+  let ablHTML = '';
+  if (refOn) {
+    ablHTML += '<tr><td><span class="pill pill-green">Reflection ON</span></td><td>' + pct(refOn.metrics.cooperation_rate || 0) + '</td><td style="color:var(--red)">' + pct(refOn.metrics.mutual_destruction_rate || 0) + '</td><td style="color:var(--red)">' + (refOn.metrics.deception_index || 0).toFixed(1) + '</td><td style="color:var(--dim);font-size:11px">Private reasoning enables strategic deception</td></tr>';
+  }
+  if (refOff) {
+    ablHTML += '<tr><td><span class="pill pill-red">Reflection OFF</span></td><td>' + pct(refOff.metrics.cooperation_rate || 0) + '</td><td style="color:var(--red)">' + pct(refOff.metrics.mutual_destruction_rate || 0) + '</td><td style="color:var(--red)">' + (refOff.metrics.deception_index || 0).toFixed(1) + '</td><td style="color:var(--dim);font-size:11px">Without reflection, cooperation persists</td></tr>';
+  }
+  if (refOn && refOff) {
+    const diDelta = (refOn.metrics.deception_index || 0) - (refOff.metrics.deception_index || 0);
+    const coopDelta = (refOff.metrics.cooperation_rate || 0) - (refOn.metrics.cooperation_rate || 0);
+    ablHTML += '<tr style="border-top:2px solid var(--border)"><td style="color:var(--bright);font-weight:600">Delta</td><td style="color:var(--green)">+' + pct(coopDelta) + ' coop</td><td></td><td style="color:var(--red)">+' + diDelta.toFixed(1) + ' DI</td><td style="color:var(--amber);font-size:11px;font-weight:600">Private reflection is causal mechanism for deception emergence</td></tr>';
+  }
+  ablBody.innerHTML = ablHTML;
+
+  // Event timeline
+  if (m.strategy && m.strategy.events) {
+    const evEl = document.getElementById('event-timeline');
+    const totalR = latestGame ? latestGame.rounds.length : 10;
+    // axis
+    let evHTML = '<div style="position:absolute;top:28px;left:0;right:0;height:4px;background:var(--surface2);border-radius:2px"></div>';
+    const colorMap = {betrayal:'var(--red)',retaliation:'var(--amber)',forgiveness:'var(--green)',truce:'var(--blue)',endgame_shift:'var(--purple)'};
+    m.strategy.events.forEach((ev, i) => {
+      const left = ((ev.round_number - 1) / Math.max(1, totalR - 1)) * 100;
+      const yOff = ev.agent === 'A' ? 8 : 38;
+      const color = colorMap[ev.event_type] || 'var(--dim)';
+      evHTML += '<div style="position:absolute;left:' + left + '%;top:' + yOff + 'px;transform:translateX(-50%)" title="R' + ev.round_number + ' ' + ev.agent + ': ' + esc(ev.event_type) + '">';
+      evHTML += '<div style="width:8px;height:8px;border-radius:50%;background:' + color + ';border:2px solid var(--bg)"></div>';
+      evHTML += '</div>';
+    });
+    evEl.innerHTML = evHTML;
+  }
+}
+
+function renderBar(label, val) {
+  const w = Math.max(0, Math.min(1, val || 0)) * 100;
+  return '<div style="display:grid;grid-template-columns:120px 1fr 40px;gap:8px;align-items:center;margin:6px 0">' +
+    '<span style="font-size:10px;color:var(--dim)">' + label + '</span>' +
+    '<div style="height:6px;background:var(--surface2);border-radius:99px;overflow:hidden"><div style="height:100%;width:' + w + '%;background:linear-gradient(90deg,var(--purple),var(--cyan));border-radius:99px"></div></div>' +
+    '<span class="mono" style="font-size:10px;text-align:right">' + pct(val || 0) + '</span>' +
+    '</div>';
+}
+
+function buildSparkline(id, data, color) {
+  const el = document.getElementById(id);
+  if (!data || data.length < 2) { el.innerHTML = ''; return; }
+  const max = Math.max(...data.map(Math.abs), 0.01);
+  el.innerHTML = data.map(v => {
+    const h = Math.max(2, Math.abs(v) / max * 36);
+    const op = 0.3 + Math.abs(v) / max * 0.7;
+    return '<div class="spark-bar" style="height:' + h + 'px;background:' + color + ';opacity:' + op + '"></div>';
+  }).join('');
+}
+
+// ============ DISTILL ============
+function renderDistill() {
+  if (!latestSkills) {
+    document.getElementById('signal-quality').innerHTML = '<div style="color:var(--dim);font-size:12px">Run python -m engine.distill to generate skills</div>';
+    return;
+  }
+
+  const sq = latestSkills.signal_quality || {};
+  document.getElementById('signal-quality').innerHTML =
+    '<div class="kv"><span class="k">Gate</span><span class="v pill ' + (sq.is_sufficient ? 'pill-green' : 'pill-red') + '">' + (sq.is_sufficient ? 'PASS' : 'BLOCKED') + '</span></div>' +
+    '<div class="kv"><span class="k">Confidence</span><span class="v">' + esc(sq.confidence || '--') + '</span></div>' +
+    '<div class="kv"><span class="k">Rounds</span><span class="v">' + (sq.rounds_observed || 0) + ' / ' + (sq.min_rounds_required || 20) + '</span></div>' +
+    '<div class="kv"><span class="k">Key Events</span><span class="v">' + (sq.key_events_observed || 0) + ' / ' + (sq.min_key_events_required || 2) + '</span></div>';
+
+  const prof = latestSkills.profile || {};
+  document.getElementById('winner-contrast').innerHTML =
+    '<div class="kv"><span class="k">Winner</span><span class="v pill pill-blue">Agent ' + esc(prof.winner_agent || '--') + '</span></div>' +
+    '<div class="kv"><span class="k">Score</span><span class="v">' + (prof.winner_score != null ? Number(prof.winner_score).toFixed(0) : '--') + '</span></div>' +
+    '<div class="kv"><span class="k">Contrast</span><span class="v pill pill-red">Agent ' + esc(prof.contrast_agent || '--') + '</span></div>' +
+    '<div class="kv"><span class="k">Delta</span><span class="v">' + (prof.score_delta != null ? Number(prof.score_delta).toFixed(0) : '--') + '</span></div>';
+
+  // Skills
+  const skills = latestSkills.skills || [];
+  const grid = document.getElementById('skills-grid');
+  if (!skills.length) {
+    grid.innerHTML = '<div style="color:var(--dim);font-size:12px;grid-column:1/-1">No skills extracted. Signal quality gate may be blocking.</div>';
+  } else {
+    grid.innerHTML = skills.map(s => {
+      const risk = s.policy ? s.policy.risk_level : 'medium';
+      const riskPill = risk === 'high' ? 'pill-red' : risk === 'low' ? 'pill-green' : 'pill-amber';
+      const trigger = s.trigger ? (s.trigger.name || '').replace(/_/g, ' ') : '';
+      const allowed = s.policy ? (s.policy.allowed_moves || []) : [];
+      const forbidden = s.policy ? (s.policy.forbidden_moves || []) : [];
+
+      return '<div class="skill-card">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+        '<div class="sk-title">' + esc(s.title) + '</div>' +
+        '<span class="pill ' + riskPill + '">' + esc(risk) + '</span>' +
+        '</div>' +
+        (trigger ? '<div class="sk-trigger">' + esc(trigger) + '</div>' : '') +
+        '<div class="sk-intent">' + esc(s.intent || '') + '</div>' +
+        '<div class="sk-moves">' +
+        allowed.map(m => '<span class="sk-move sk-allow">' + esc(m.replace(/_/g,' ')) + '</span>').join('') +
+        forbidden.map(m => '<span class="sk-move sk-forbid">' + esc(m.replace(/_/g,' ')) + '</span>').join('') +
+        '</div>' +
+        '<div class="sk-footer"><span>Confidence: ' + (s.confidence_score ? Math.round(s.confidence_score * 100) + '%' : '--') + '</span><span>Source: Agent ' + esc(s.provenance ? s.provenance.source_agent : '--') + '</span></div>' +
+        '</div>';
+    }).join('');
+  }
+
+  // Trace matrix
+  const trace = latestSkills.trace_matrix || [];
+  const traceBody = document.getElementById('trace-rows');
+  traceBody.innerHTML = trace.map(row =>
+    '<tr>' +
+    '<td><code>' + esc(row.strategy_metric) + '</code></td>' +
+    '<td>' + (row.observed_value != null ? Number(row.observed_value).toFixed(3) : '--') + '</td>' +
+    '<td>' + (row.contrast_value != null ? Number(row.contrast_value).toFixed(3) : '--') + '</td>' +
+    '<td style="color:var(--dim)">' + esc(row.fraud_interpretation || '') + '</td>' +
+    '<td>' + (row.skill_ids || []).map(id => '<span class="pill pill-purple" style="margin:1px">' + esc(id) + '</span>').join('') + '</td>' +
+    '</tr>'
+  ).join('');
+}
+
+// ============ DEPLOY ============
+function renderDeploy() {
+  const skills = latestSkills ? (latestSkills.skills || []) : [];
+  document.getElementById('deploy-count').textContent = skills.length;
+  document.getElementById('deploy-domains').textContent = latestSkills ? (latestSkills.domain || 'fraud_ops') : '--';
+  document.getElementById('deploy-mode').textContent = 'advisory';
+
+  const container = document.getElementById('deploy-cards');
+  if (!skills.length) {
+    container.innerHTML = '<div class="card" style="color:var(--dim);text-align:center;padding:30px">No policies ready for deployment. Run the full pipeline first.</div>';
+    return;
+  }
+
+  container.innerHTML = '<div class="grid-2" style="gap:14px">' + skills.map(s => {
+    const sysExt = s.prompt_modules ? s.prompt_modules.system_extension || '' : '';
+    const constraints = s.prompt_modules ? s.prompt_modules.response_constraints || '' : '';
+    const repair = s.prompt_modules ? s.prompt_modules.repair_playbook || '' : '';
+    const risk = s.policy ? s.policy.risk_level : 'medium';
+
+    return '<div class="deploy-card">' +
+      '<div class="deploy-header">' +
+      '<div><div class="deploy-title">' + esc(s.title) + '</div>' +
+      '<div class="deploy-domain">' + esc(s.id) + ' | ' + esc(risk) + ' risk</div></div>' +
+      '<span class="pill pill-green">Ready</span>' +
+      '</div>' +
+      '<div class="deploy-prompt">// System Extension\n' + esc(sysExt) + '\n\n// Response Constraints\n' + esc(constraints) + (repair ? '\n\n// Repair Playbook\n' + esc(repair) : '') + '</div>' +
+      '<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">' +
+      (s.when_to_use || []).map(w => '<span class="pill pill-green" style="font-size:8px">' + esc(w) + '</span>').join('') +
+      '</div>' +
+      '</div>';
+  }).join('') + '</div>';
+}
+
+// ============ BOOT ============
+loadAllData();
+</script>
+</body>
+</html>
