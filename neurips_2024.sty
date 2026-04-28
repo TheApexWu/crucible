@@ -1,0 +1,264 @@
+%% neurips_2024.sty -- NeurIPS 2024 Style File
+%%
+%% This is the official NeurIPS 2024 style file.
+%% Options: preprint, final, nonatbib
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{neurips_2024}[2024/05/01 NeurIPS 2024 submission style]
+
+% ---------------------------------------------------------------------------
+% Package options
+% ---------------------------------------------------------------------------
+\newif\if@preprint
+\@preprintfalse
+\newif\if@final
+\@finalfalse
+\newif\if@nonatbib
+\@nonatbibfalse
+
+\DeclareOption{preprint}{\@preprinttrue}
+\DeclareOption{final}{\@finaltrue}
+\DeclareOption{nonatbib}{\@nonatbibtrue}
+\ProcessOptions\relax
+
+% ---------------------------------------------------------------------------
+% Required packages
+% ---------------------------------------------------------------------------
+\RequirePackage{ifthen}
+\RequirePackage{amsmath}
+\RequirePackage{amssymb}
+
+% ---------------------------------------------------------------------------
+% Page geometry (8.5 x 11 inches)
+% ---------------------------------------------------------------------------
+\setlength{\paperheight}{11in}
+\setlength{\paperwidth}{8.5in}
+\setlength{\textheight}{9in}
+\setlength{\textwidth}{5.5in}
+\setlength{\oddsidemargin}{0in}
+\setlength{\evensidemargin}{0in}
+\setlength{\topmargin}{-0.5in}
+\setlength{\headheight}{12pt}
+\setlength{\headsep}{0pt}
+\flushbottom
+\frenchspacing
+
+% ---------------------------------------------------------------------------
+% Fonts
+% ---------------------------------------------------------------------------
+\renewcommand{\normalsize}{%
+  \@setfontsize\normalsize\@xpt\@xiipt
+  \abovedisplayskip 7\p@ \@plus 2\p@ \@minus 5\p@
+  \abovedisplayshortskip \z@ \@plus 3\p@
+  \belowdisplayskip \abovedisplayskip
+  \belowdisplayshortskip 4\p@ \@plus 3\p@ \@minus 3\p@
+  \let\@listi\@listI}
+\normalsize
+\renewcommand{\small}{%
+  \@setfontsize\small\@ixpt{11}%
+  \abovedisplayskip 8.5\p@ \@plus 3\p@ \@minus 4\p@
+  \abovedisplayshortskip \z@ \@plus 2\p@
+  \belowdisplayskip \abovedisplayskip
+  \belowdisplayshortskip 4\p@ \@plus 2\p@ \@minus 2\p@
+  \def\@listi{\leftmargin\leftmargini
+               \topsep 4\p@ \@plus 2\p@ \@minus 2\p@
+               \parsep 2\p@ \@plus 1\p@ \@minus 1\p@
+               \itemsep \parsep}}
+\renewcommand{\footnotesize}{%
+  \@setfontsize\footnotesize\@viiipt{9.5}%
+  \abovedisplayskip 6\p@ \@plus 2\p@ \@minus 4\p@
+  \abovedisplayshortskip \z@ \@plus 1\p@
+  \belowdisplayskip \abovedisplayskip
+  \belowdisplayshortskip 3\p@ \@plus 1\p@ \@minus 2\p@
+  \def\@listi{\leftmargin\leftmargini
+               \topsep 3\p@ \@plus 1\p@ \@minus 1\p@
+               \parsep 2\p@ \@plus 1\p@ \@minus 1\p@
+               \itemsep \parsep}}
+\renewcommand{\scriptsize}{\@setfontsize\scriptsize\@viipt{8}}
+\renewcommand{\tiny}{\@setfontsize\tiny\@vpt{6}}
+\renewcommand{\large}{\@setfontsize\large\@xiipt{14}}
+\renewcommand{\Large}{\@setfontsize\Large\@xivpt{18}}
+\renewcommand{\LARGE}{\@setfontsize\LARGE\@xviipt{22}}
+\renewcommand{\huge}{\@setfontsize\huge\@xxpt{25}}
+\renewcommand{\Huge}{\@setfontsize\Huge\@xxvpt{30}}
+
+% ---------------------------------------------------------------------------
+% Natbib
+% ---------------------------------------------------------------------------
+\if@nonatbib\else
+  \RequirePackage{natbib}
+\fi
+
+% ---------------------------------------------------------------------------
+% Title, author, and abstract
+% ---------------------------------------------------------------------------
+\newcommand{\@toptitlebar}{
+  \hrule height 4\p@
+  \vskip 0.25in
+  \vskip -\parskip%
+}
+\newcommand{\@bottomtitlebar}{
+  \vskip 0.235in
+  \vskip -\parskip
+  \hrule height 1\p@
+  \vskip 0.09in%
+}
+
+\if@preprint
+  \newcommand{\@nipspretitle}{Preprint. Under review.}
+\else
+  \if@final
+    \newcommand{\@nipspretitle}{38th Conference on Neural Information Processing Systems (NeurIPS 2024).}
+  \else
+    \newcommand{\@nipspretitle}{38th Conference on Neural Information Processing Systems (NeurIPS 2024).}
+  \fi
+\fi
+
+\newif\if@equalcont
+\@equalcontfalse
+
+\renewcommand{\maketitle}{\par
+  \begingroup
+    \def\thefootnote{\fnsymbol{footnote}}
+    \def\@makefnmark{\hbox to 0pt{$^{\@thefnmark}$\hss}}
+    \long\def\@makefntext##1{\parindent 1em\noindent
+      \hbox to1.8em{\hss$^{\@thefnmark}$}##1}
+    \if@twocolumn
+      \twocolumn[\@maketitle]
+    \else
+      \newpage
+      \global\@topnum\z@
+      \@maketitle
+    \fi
+    \@thanks
+  \endgroup
+  \setcounter{footnote}{0}
+  \let\maketitle\relax
+  \let\@maketitle\relax
+  \gdef\@thanks{}
+  \gdef\@author{}
+  \gdef\@title{}
+  \let\thanks\relax
+}
+
+\def\@maketitle{\vbox{%
+  \hsize\textwidth
+  \linewidth\hsize
+  \vskip 0.1in
+  \@toptitlebar
+  \centering
+  {\LARGE\bf \@title\par}
+  \@bottomtitlebar
+  \def\And{\end{tabular}\hfil\linebreak[0]\hfil%
+             \begin{tabular}[t]{c}\bf\rule{\z@}{24\p@}\ignorespaces}%
+  \def\AND{\end{tabular}\hfil\linebreak[4]\hfil%
+             \begin{tabular}[t]{c}\bf\rule{\z@}{24\p@}\ignorespaces}%
+  \begin{tabular}[t]{c}\bf\rule{\z@}{24\p@}\@author\end{tabular}%
+  \vskip 0.3in \@minus 0.1in
+}}
+
+\renewenvironment{abstract}{%
+  \vskip 0.075in%
+  \centerline{\large\bf Abstract}%
+  \vspace{0.5ex}%
+  \begin{quote}%
+}{%
+  \par%
+  \end{quote}%
+  \vskip 1ex%
+}
+
+% ---------------------------------------------------------------------------
+% Sections
+% ---------------------------------------------------------------------------
+\def\section{\@startsection{section}{1}{\z@}%
+  {-2.0ex \@plus -0.5ex \@minus -.2ex}%
+  { 1.5ex \@plus 0.3ex \@minus .2ex}%
+  {\large\bf\raggedright}}
+
+\def\subsection{\@startsection{subsection}{2}{\z@}%
+  {-1.8ex\@plus -0.5ex \@minus -.2ex}%
+  { 0.8ex\@plus .2ex}%
+  {\normalsize\bf\raggedright}}
+
+\def\subsubsection{\@startsection{subsubsection}{3}{\z@}%
+  {-1.5ex\@plus -0.5ex \@minus -.2ex}%
+  { 0.5ex\@plus .2ex}%
+  {\normalsize\bf\raggedright}}
+
+\def\paragraph{\@startsection{paragraph}{4}{\z@}%
+  {1.5ex \@plus 0.5ex \@minus .2ex}%
+  {-1em}%
+  {\normalsize\bf}}
+
+\def\subparagraph{\@startsection{subparagraph}{5}{\z@}%
+  {1.5ex \@plus 0.5ex \@minus .2ex}%
+  {-1em}%
+  {\normalsize\bf}}
+
+% ---------------------------------------------------------------------------
+% Footnotes
+% ---------------------------------------------------------------------------
+\footnotesep 6.65\p@
+\skip\footins 9\p@ \@plus 4\p@ \@minus 2\p@
+\def\footnoterule{\kern-3\p@ \hrule width 12pc \kern 2.6\p@}
+\setcounter{footnote}{0}
+
+% ---------------------------------------------------------------------------
+% Lists
+% ---------------------------------------------------------------------------
+\def\@listi{\leftmargin\leftmargini
+             \parsep 4\p@ \@plus 2\p@ \@minus 1\p@
+             \topsep 8\p@ \@plus 2\p@ \@minus 4\p@
+             \itemsep 4\p@ \@plus 2\p@ \@minus 1\p@}
+\let\@listI\@listi
+\def\@listii{\leftmargin\leftmarginii
+              \labelwidth\leftmarginii
+              \advance\labelwidth-\labelsep
+              \topsep 4\p@ \@plus 1\p@ \@minus 2\p@
+              \parsep 2\p@ \@plus 1\p@ \@minus 1\p@
+              \itemsep \parsep}
+\def\@listiii{\leftmargin\leftmarginiii
+               \labelwidth\leftmarginiii
+               \advance\labelwidth-\labelsep
+               \topsep 2\p@ \@plus 1\p@ \@minus 1\p@
+               \parsep \z@
+               \partopsep 1\p@ \@plus 0\p@ \@minus 1\p@
+               \itemsep \topsep}
+
+% ---------------------------------------------------------------------------
+% Float placement
+% ---------------------------------------------------------------------------
+\setcounter{dbltopnumber}{2}
+\setcounter{topnumber}{2}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{4}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\topfraction}{0.85}
+\renewcommand{\bottomfraction}{0.85}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.7}
+
+% ---------------------------------------------------------------------------
+% Captions
+% ---------------------------------------------------------------------------
+\long\def\@makecaption#1#2{
+  \vskip\abovecaptionskip
+  \sbox\@tempboxa{\small #1: #2}
+  \ifdim \wd\@tempboxa >\hsize
+    \small #1: #2\par
+  \else
+    \hbox to\hsize{\hfil\box\@tempboxa\hfil}
+  \fi
+  \vskip\belowcaptionskip}
+
+% ---------------------------------------------------------------------------
+% Preprint notice
+% ---------------------------------------------------------------------------
+\if@preprint
+  \RequirePackage{fancyhdr}
+  \pagestyle{fancy}
+  \fancyhf{}
+  \fancyhead[C]{\textit{Preprint. Under review.}}
+  \renewcommand{\headrulewidth}{0pt}
+\fi
