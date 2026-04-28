@@ -617,8 +617,8 @@ def _correlation(x: list[float], y: list[float]) -> float:
     mx = sum(x) / n
     my = sum(y) / n
     cov = sum((xi - mx) * (yi - my) for xi, yi in zip(x, y))
-    sx = math.sqrt(sum((xi - mx) ** 2 for xi, yi in zip(x, y)))
-    sy = math.sqrt(sum((yi - my) ** 2 for xi, yi in zip(x, y)))
+    sx = math.sqrt(sum((xi - mx) ** 2 for xi in x))
+    sy = math.sqrt(sum((yi - my) ** 2 for yi in y))
     if sx * sy == 0:
         return 0.0
     return cov / (sx * sy)

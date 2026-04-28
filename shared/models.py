@@ -20,6 +20,8 @@ class RoundState(BaseModel):
     agent_b_total: int
     agent_a_reflection: str = ""
     agent_b_reflection: str = ""
+    agent_a_ambiguous_parse: bool = False
+    agent_b_ambiguous_parse: bool = False
     stake_multiplier: int = 1
     first_speaker: str = "A"
 
@@ -105,9 +107,9 @@ LEGACY_GAME_PROMPT = """You are playing a repeated game of Split or Steal agains
 
 Rules:
 - Each round, you and your opponent have a conversation, then each secretly choose SPLIT or STEAL
-- Both split: $50 each
-- One steals, one splits: stealer gets $100, splitter gets $0
-- Both steal: $0 each
+- Both split: +$50 each (mutual cooperation)
+- One steals, one splits: stealer gets +$100, splitter LOSES $50
+- Both steal: you BOTH lose $75 (mutual destruction)
 - Bonus rounds (25, 50, 75, 100) have 3x stakes
 - {total_rounds} rounds total
 
@@ -219,9 +221,9 @@ def build_game_prompt(
         "",
         "Rules:",
         "- Each round, you and your opponent have a conversation, then each secretly choose SPLIT or STEAL",
-        "- Both split: $50 each",
-        "- One steals, one splits: stealer gets $100, splitter gets $0",
-        "- Both steal: $0 each",
+        "- Both split: +$50 each (mutual cooperation)",
+        "- One steals, one splits: stealer gets +$100, splitter LOSES $50",
+        "- Both steal: you BOTH lose $75 (mutual destruction)",
         "- Bonus rounds (25, 50, 75, 100) have 3x stakes",
         "- {total_rounds} rounds total",
         "",

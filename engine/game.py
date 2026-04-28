@@ -1,17 +1,16 @@
 """
 CRUCIBLE Game Engine
 
-Runs Split or Steal between two Gemini agents with private reflections.
+Runs Split or Steal between two LLM agents with private reflections.
+Supports Gemini, Claude, and OpenAI models via CRUCIBLE_MODEL env var.
 """
 
 import asyncio
 import os
 import re
-import time
 from typing import Optional
 
 from dotenv import load_dotenv
-from google import genai
 
 from shared.models import (
     GameState, AgentMemory, RoundState, RoundMetrics,
@@ -23,11 +22,85 @@ from engine.instrumentation import (
 
 load_dotenv()
 
-# force the correct key, ignore any stale GOOGLE_API_KEY in env
-os.environ.pop("GOOGLE_API_KEY", None)
-api_key = os.environ["GEMINI_API_KEY"]
-model_name = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
-client = genai.Client(api_key=api_key)
+
+def _resolve_model() -> str:
+    """Determine which model to use. Priority: CRUCIBLE_MODEL > GEMINI_MODEL > default."""
+    return os.environ.get("CRUCIBLE_MODEL") or os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+
+
+def _detect_provider(model: str) -> str:
+    """Infer provider from model name string."""
+    if model.startswith("claude"):
+        return "anthropic"
+    if model.startswith("gpt-") or model.startswith("o1") or model.startswith("o3") or model.startswith("o4"):
+        return "openai"
+    # Default to Gemini (covers gemini-*, models/gemini-*, etc.)
+    return "google"
+
+
+model_name = _resolve_model()
+_provider = _detect_provider(model_name)
+
+
+# Lazy-initialized clients (one per provider, created on first call)
+_clients: dict = {}
+
+
+def _get_gemini_client():
+    if "gemini" not in _clients:
+        from google import genai
+        os.environ.pop("GOOGLE_API_KEY", None)
+        _clients["gemini"] = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    return _clients["gemini"]
+
+
+def _get_anthropic_client():
+    if "anthropic" not in _clients:
+        import anthropic
+        _clients["anthropic"] = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    return _clients["anthropic"]
+
+
+def _get_openai_client():
+    if "openai" not in _clients:
+        import openai
+        _clients["openai"] = openai.AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    return _clients["openai"]
+
+
+async def _call_gemini(prompt: str) -> str:
+    client = _get_gemini_client()
+    response = await client.aio.models.generate_content(model=model_name, contents=prompt)
+    return response.text or ""
+
+
+async def _call_anthropic(prompt: str) -> str:
+    client = _get_anthropic_client()
+    response = await client.messages.create(
+        model=model_name,
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.content[0].text
+
+
+async def _call_openai(prompt: str) -> str:
+    client = _get_openai_client()
+    response = await client.chat.completions.create(
+        model=model_name,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1024,
+    )
+    return response.choices[0].message.content or ""
+
+
+_PROVIDER_DISPATCH = {
+    "google": _call_gemini,
+    "anthropic": _call_anthropic,
+    "openai": _call_openai,
+}
+
+print(f"[engine] Model: {model_name} (provider: {_provider})")
 
 MEMORY_WINDOW = 8
 MAX_REFLECTION_CHARS = 500
@@ -85,17 +158,27 @@ def get_stake_multiplier(round_number: int) -> int:
 
 
 def resolve(a_choice: str, b_choice: str, multiplier: int = 1) -> tuple[int, int]:
-    """Resolve a round of Split or Steal. Returns (a_earnings, b_earnings)."""
-    base_split = 50 * multiplier
-    base_steal = 100 * multiplier
+    """Resolve a round of Split or Steal with Chicken payoff structure.
+
+    Chicken (Hawk-Dove) variant: mutual stealing is punished, not zero-sum.
+    This removes the dominant strategy, forcing agents to model opponent intent.
+      Split/Split: +50 each (mutual cooperation)
+      Steal/Split: +100 / -50 (exploitation with victim penalty)
+      Split/Steal: -50 / +100 (being exploited)
+      Steal/Steal: -75 / -75 (mutual destruction, worst outcome)
+    """
+    base_coop = 50 * multiplier
+    base_exploit = 100 * multiplier
+    base_victim = -50 * multiplier
+    base_crash = -75 * multiplier
     if a_choice == "split" and b_choice == "split":
-        return base_split, base_split
+        return base_coop, base_coop
     elif a_choice == "steal" and b_choice == "split":
-        return base_steal, 0
+        return base_exploit, base_victim
     elif a_choice == "split" and b_choice == "steal":
-        return 0, base_steal
-    else:  # both steal
-        return 0, 0
+        return base_victim, base_exploit
+    else:  # both steal: mutual destruction
+        return base_crash, base_crash
 
 
 def format_history(game_state: GameState, agent: str = "A", max_full_rounds: int = 8) -> str:
@@ -144,41 +227,48 @@ def clean_response(text: str) -> str:
     return text.strip()
 
 
-def parse_choice(response: str) -> str:
-    """Extract SPLIT or STEAL from agent response."""
+def parse_choice(response: str) -> tuple[str, bool]:
+    """Extract SPLIT or STEAL from agent response.
+
+    Returns (choice, ambiguous). If the first line contains neither keyword
+    or contains both, the parse is ambiguous and defaults to "split".
+    Callers should log ambiguous parses so inflated cooperation rates are
+    visible in post-hoc analysis.
+    """
     cleaned = clean_response(response)
     first_line = cleaned.split("\n")[0].upper()
-    if "STEAL" in first_line:
-        return "steal"
-    return "split"  # Default to split if ambiguous
+    has_steal = "STEAL" in first_line
+    has_split = "SPLIT" in first_line
+    if has_steal and not has_split:
+        return "steal", False
+    if has_split and not has_steal:
+        return "split", False
+    # Ambiguous: both present, or neither present. Default split but flag it.
+    return "split", True
 
 
 async def llm_call(prompt: str, agent_label: str = "", max_retries: int = 5) -> str:
-    """Call Gemini model with retry on rate limit."""
+    """Call the configured LLM with retry on rate limit."""
+    call_fn = _PROVIDER_DISPATCH[_provider]
     for attempt in range(max_retries):
         try:
-            response = await client.aio.models.generate_content(
-                model=model_name,
-                contents=prompt,
-            )
-            text = response.text
-            if text is None:
-                text = ""
+            text = await call_fn(prompt)
             # Annotate Datadog span with LLM I/O
             dd_annotate(
                 input_data=prompt[:500],
                 output_data=text[:500],
-                metadata={"agent": agent_label, "model": model_name},
+                metadata={"agent": agent_label, "model": model_name, "provider": _provider},
             )
             return text
         except Exception as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+            err_str = str(e)
+            if "429" in err_str or "503" in err_str or "RESOURCE_EXHAUSTED" in err_str or "UNAVAILABLE" in err_str or "rate" in err_str.lower():
                 wait = 2 ** attempt + 1
                 print(f"  [{agent_label}] rate limited, waiting {wait}s (attempt {attempt+1})")
                 await asyncio.sleep(wait)
             else:
                 raise
-    raise Exception(f"Failed after {max_retries} retries")
+    raise Exception(f"Failed after {max_retries} retries for {model_name}")
 
 
 async def run_round(
@@ -190,6 +280,7 @@ async def run_round(
     game_prompt: str = "",
     choice_prompt: str = "",
     reflection_prompt: str = "",
+    enable_reflection: bool = True,
 ) -> RoundState:
     """Run a single round of Split or Steal."""
     if not game_prompt or not choice_prompt or not reflection_prompt:
@@ -206,8 +297,8 @@ async def run_round(
 
     # Pre-compute shared context (avoid recomputation per call)
     stake_info = (
-        f"BONUS ROUND ({multiplier}x)! Split/Split=${50*multiplier}ea. Steal/Split=${100*multiplier}/$0."
-        if multiplier > 1 else "Standard. Split/Split=$50ea."
+        f"BONUS ROUND ({multiplier}x)! Split/Split=+${50*multiplier}ea. Steal/Split=+${100*multiplier}/-${50*multiplier}. Steal/Steal=-${75*multiplier}ea."
+        if multiplier > 1 else "Standard. Split/Split=+$50ea. Steal/Split=+$100/-$50. Steal/Steal=-$75ea."
     )
     history_a = format_history(game_state, agent="A")
     history_b = format_history(game_state, agent="B")
@@ -257,8 +348,12 @@ async def run_round(
         llm_call(choice_prompt.format(transcript=transcript, reflections=refs_b), "B"),
     )
 
-    a_choice = parse_choice(a_choice_raw)
-    b_choice = parse_choice(b_choice_raw)
+    a_choice, a_ambiguous = parse_choice(a_choice_raw)
+    b_choice, b_ambiguous = parse_choice(b_choice_raw)
+    if a_ambiguous:
+        print(f"  [R{round_number}] WARNING: Agent A choice ambiguous, defaulted to split. Raw: {a_choice_raw[:120]}")
+    if b_ambiguous:
+        print(f"  [R{round_number}] WARNING: Agent B choice ambiguous, defaulted to split. Raw: {b_choice_raw[:120]}")
 
     # Phase 3: Resolve
     a_earn, b_earn = resolve(a_choice, b_choice, multiplier)
@@ -274,6 +369,8 @@ async def run_round(
         agent_b_earnings=b_earn,
         agent_a_total=game_state.agent_a_total,
         agent_b_total=game_state.agent_b_total,
+        agent_a_ambiguous_parse=a_ambiguous,
+        agent_b_ambiguous_parse=b_ambiguous,
         stake_multiplier=multiplier,
         first_speaker="A" if a_first else "B",
     )
@@ -294,35 +391,37 @@ async def run_round(
     if b_choice == "steal" and a_choice == "split":
         dd_submit_eval("betrayal_b", 1.0)
 
-    # Phase 4: Private reflections (parallel)
-    a_messages = " | ".join(m for s, m in conversation if s == "A")
-    b_messages = " | ".join(m for s, m in conversation if s == "B")
-    outcome = f"You earned ${a_earn}, opponent earned ${b_earn}"
-    outcome_b = f"You earned ${b_earn}, opponent earned ${a_earn}"
+    # Phase 4: Private reflections (parallel). Skipped for reflection ablation.
+    if enable_reflection:
+        a_messages = " | ".join(m for s, m in conversation if s == "A")
+        b_messages = " | ".join(m for s, m in conversation if s == "B")
+        outcome = f"You earned ${a_earn}, opponent earned ${b_earn}"
+        outcome_b = f"You earned ${b_earn}, opponent earned ${a_earn}"
 
-    a_ref, b_ref = await asyncio.gather(
-        llm_call(reflection_prompt.format(
-            round_number=round_number,
-            your_messages=a_messages, opp_messages=b_messages,
-            your_choice=a_choice.upper(), opp_choice=b_choice.upper(),
-            outcome=outcome,
-            your_total=game_state.agent_a_total, opp_total=game_state.agent_b_total,
-        ), "A"),
-        llm_call(reflection_prompt.format(
-            round_number=round_number,
-            your_messages=b_messages, opp_messages=a_messages,
-            your_choice=b_choice.upper(), opp_choice=a_choice.upper(),
-            outcome=outcome_b,
-            your_total=game_state.agent_b_total, opp_total=game_state.agent_a_total,
-        ), "B"),
-    )
+        a_ref, b_ref = await asyncio.gather(
+            llm_call(reflection_prompt.format(
+                round_number=round_number,
+                your_messages=a_messages, opp_messages=b_messages,
+                your_choice=a_choice.upper(), opp_choice=b_choice.upper(),
+                outcome=outcome,
+                your_total=game_state.agent_a_total, opp_total=game_state.agent_b_total,
+            ), "A"),
+            llm_call(reflection_prompt.format(
+                round_number=round_number,
+                your_messages=b_messages, opp_messages=a_messages,
+                your_choice=b_choice.upper(), opp_choice=a_choice.upper(),
+                outcome=outcome_b,
+                your_total=game_state.agent_b_total, opp_total=game_state.agent_a_total,
+            ), "B"),
+        )
 
-    a_reflection = _truncate_text(a_ref, MAX_REFLECTION_CHARS)
-    b_reflection = _truncate_text(b_ref, MAX_REFLECTION_CHARS)
-    round_state.agent_a_reflection = a_reflection
-    round_state.agent_b_reflection = b_reflection
-    game_state.agent_a_memory.reflections.append(_reflection_to_memory_entry(a_reflection))
-    game_state.agent_b_memory.reflections.append(_reflection_to_memory_entry(b_reflection))
+        a_reflection = _truncate_text(a_ref, MAX_REFLECTION_CHARS)
+        b_reflection = _truncate_text(b_ref, MAX_REFLECTION_CHARS)
+        round_state.agent_a_reflection = a_reflection
+        round_state.agent_b_reflection = b_reflection
+        game_state.agent_a_memory.reflections.append(_reflection_to_memory_entry(a_reflection))
+        game_state.agent_b_memory.reflections.append(_reflection_to_memory_entry(b_reflection))
+
     game_state.rounds.append(round_state)
 
     if on_update:
@@ -338,6 +437,7 @@ async def run_game(
     prompt_mode: str = "balanced_competitive",
     psychology_block: str = "on",
     deception_policy: str = "explicit",
+    enable_reflection: bool = True,
 ) -> GameState:
     """Run a full game of Split or Steal."""
     game_state = GameState()
@@ -357,6 +457,7 @@ async def run_game(
             game_prompt=prompts["game_prompt"],
             choice_prompt=prompts["choice_prompt"],
             reflection_prompt=prompts["reflection_prompt"],
+            enable_reflection=enable_reflection,
         )
 
     return game_state
