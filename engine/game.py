@@ -147,14 +147,9 @@ def _reflection_to_memory_entry(reflection_text: str) -> str:
     return _truncate_text(summary, MAX_MEMORY_ENTRY_CHARS)
 
 
-# Predetermined bonus rounds (3x stakes). Agents are told about these.
-BONUS_ROUNDS = {25, 50, 75, 100}
-BONUS_MULTIPLIER = 3
-
-
 def get_stake_multiplier(round_number: int) -> int:
-    """Return the stake multiplier for a given round."""
-    return BONUS_MULTIPLIER if round_number in BONUS_ROUNDS else 1
+    """Return the stake multiplier for a given round. Always 1 (uniform stakes)."""
+    return 1
 
 
 def resolve(a_choice: str, b_choice: str, multiplier: int = 1) -> tuple[int, int]:
@@ -296,10 +291,7 @@ async def run_round(
     a_first = (round_number % 2 == 1)
 
     # Pre-compute shared context (avoid recomputation per call)
-    stake_info = (
-        f"BONUS ROUND ({multiplier}x)! Split/Split=+${50*multiplier}ea. Steal/Split=+${100*multiplier}/-${50*multiplier}. Steal/Steal=-${75*multiplier}ea."
-        if multiplier > 1 else "Standard. Split/Split=+$50ea. Steal/Split=+$100/-$50. Steal/Steal=-$75ea."
-    )
+    stake_info = "Split/Split=+$50ea. Steal/Split=+$100/-$50. Steal/Steal=-$75ea."
     history_a = format_history(game_state, agent="A")
     history_b = format_history(game_state, agent="B")
     refs_a = "\n".join(game_state.agent_a_memory.reflections[-MEMORY_WINDOW:]) or "None yet."

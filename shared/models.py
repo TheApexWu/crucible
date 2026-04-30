@@ -110,7 +110,6 @@ Rules:
 - Both split: +$50 each (mutual cooperation)
 - One steals, one splits: stealer gets +$100, splitter LOSES $50
 - Both steal: you BOTH lose $75 (mutual destruction)
-- Bonus rounds (25, 50, 75, 100) have 3x stakes
 - {total_rounds} rounds total
 
 State:
@@ -224,7 +223,6 @@ def build_game_prompt(
         "- Both split: +$50 each (mutual cooperation)",
         "- One steals, one splits: stealer gets +$100, splitter LOSES $50",
         "- Both steal: you BOTH lose $75 (mutual destruction)",
-        "- Bonus rounds (25, 50, 75, 100) have 3x stakes",
         "- {total_rounds} rounds total",
         "",
         OBJECTIVE_BLOCKS[mode],
