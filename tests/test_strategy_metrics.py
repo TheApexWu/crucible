@@ -6,13 +6,14 @@ from shared.models import GameState, RoundState
 
 
 def _resolve(a_choice: str, b_choice: str) -> tuple[int, int]:
+    """Chicken (Hawk-Dove) payoffs -- must match engine/game.py resolve()."""
     if a_choice == "split" and b_choice == "split":
         return 50, 50
     if a_choice == "steal" and b_choice == "split":
-        return 100, 0
+        return 100, -50
     if a_choice == "split" and b_choice == "steal":
-        return 0, 100
-    return 0, 0
+        return -50, 100
+    return -75, -75
 
 
 def _build_game(a_choices: list[str], b_choices: list[str]) -> GameState:

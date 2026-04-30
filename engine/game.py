@@ -247,7 +247,7 @@ def parse_choice(response: str) -> tuple[str, bool]:
     return "split", True
 
 
-async def llm_call(prompt: str, agent_label: str = "", max_retries: int = 5) -> str:
+async def llm_call(prompt: str, agent_label: str = "", max_retries: int = 12) -> str:
     """Call the configured LLM with retry on rate limit."""
     call_fn = _PROVIDER_DISPATCH[_provider]
     for attempt in range(max_retries):
@@ -263,7 +263,7 @@ async def llm_call(prompt: str, agent_label: str = "", max_retries: int = 5) -> 
         except Exception as e:
             err_str = str(e)
             if "429" in err_str or "503" in err_str or "RESOURCE_EXHAUSTED" in err_str or "UNAVAILABLE" in err_str or "rate" in err_str.lower():
-                wait = 2 ** attempt + 1
+                wait = min(10 * (2 ** attempt), 120)
                 print(f"  [{agent_label}] rate limited, waiting {wait}s (attempt {attempt+1})")
                 await asyncio.sleep(wait)
             else:
