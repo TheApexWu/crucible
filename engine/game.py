@@ -250,13 +250,18 @@ def parse_choice(response: str) -> tuple[str, bool]:
     return "split", True
 
 
-async def llm_call(prompt: str, agent_label: str = "", max_retries: int = 12) -> str:
-    """Call the configured LLM with retry on rate limit."""
+async def llm_call(prompt: str, agent_label: str = "", max_retries: int = 5) -> str:
+    """Call the configured LLM with retry on rate limit.
+
+    Safety: max 5 retries (was 12), 60s minimum wait (was 10s),
+    max 180s total wait before giving up. Prevents runaway billing.
+    """
     call_fn = _PROVIDER_DISPATCH[_provider]
+    total_wait = 0
+    MAX_TOTAL_WAIT = 180  # hard cap: 3 minutes total wait per call
     for attempt in range(max_retries):
         try:
             text = await call_fn(prompt)
-            # Annotate Datadog span with LLM I/O
             dd_annotate(
                 input_data=prompt[:500],
                 output_data=text[:500],
@@ -266,12 +271,15 @@ async def llm_call(prompt: str, agent_label: str = "", max_retries: int = 12) ->
         except Exception as e:
             err_str = str(e)
             if "429" in err_str or "503" in err_str or "RESOURCE_EXHAUSTED" in err_str or "UNAVAILABLE" in err_str or "rate" in err_str.lower():
-                wait = min(10 * (2 ** attempt), 120)
-                print(f"  [{agent_label}] rate limited, waiting {wait}s (attempt {attempt+1})")
+                wait = min(60 * (2 ** attempt), 120)
+                total_wait += wait
+                if total_wait > MAX_TOTAL_WAIT:
+                    raise Exception(f"Rate limited for {total_wait}s total, giving up. Model: {model_name}. Wait a few minutes and retry.")
+                print(f"  [{agent_label}] rate limited, waiting {wait}s (attempt {attempt+1}/{max_retries}, {total_wait}s total)")
                 await asyncio.sleep(wait)
             else:
                 raise
-    raise Exception(f"Failed after {max_retries} retries for {model_name}")
+    raise Exception(f"Failed after {max_retries} retries for {model_name}. Total wait: {total_wait}s.")
 
 
 async def run_round(

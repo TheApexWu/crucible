@@ -153,11 +153,11 @@ async def main():
     print(f"Round timeout: {args.round_timeout}s | Ctrl+C for graceful shutdown")
     print("=" * 60)
 
-    # === PREFLIGHT ===
+    # === PREFLIGHT (no retries -- fail fast) ===
     print(f"[preflight] Testing {model_name}...", end=" ", flush=True)
     try:
         from engine.game import llm_call
-        test_resp = await asyncio.wait_for(llm_call("Say OK.", agent_label="preflight"), timeout=30)
+        test_resp = await asyncio.wait_for(llm_call("Say OK.", agent_label="preflight", max_retries=1), timeout=30)
         print(f"OK ({len(test_resp)} chars)")
     except asyncio.TimeoutError:
         print("FAILED (timeout after 30s)")
