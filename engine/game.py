@@ -34,6 +34,8 @@ def _detect_provider(model: str) -> str:
         return "anthropic"
     if model.startswith("gpt-") or model.startswith("o1") or model.startswith("o3") or model.startswith("o4"):
         return "openai"
+    if model.startswith("deepseek"):
+        return "openai"  # DeepSeek uses OpenAI-compatible API
     # Default to Gemini (covers gemini-*, models/gemini-*, etc.)
     return "google"
 
@@ -64,7 +66,13 @@ def _get_anthropic_client():
 def _get_openai_client():
     if "openai" not in _clients:
         import openai
-        _clients["openai"] = openai.AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        if model_name.startswith("deepseek"):
+            _clients["openai"] = openai.AsyncOpenAI(
+                api_key=os.environ["DEEPSEEK_API_KEY"],
+                base_url="https://api.deepseek.com",
+            )
+        else:
+            _clients["openai"] = openai.AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
     return _clients["openai"]
 
 

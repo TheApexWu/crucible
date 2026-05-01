@@ -2,7 +2,7 @@
 CRUCIBLE Runner (Hardened)
 
 Execute a full game and save results with experiment metadata.
-Usage: python -m engine.run [--rounds 100] [--turns 3] [--seed 42]
+Usage: python -m engine.run [--rounds 25] [--turns 2] [--seed 42]
 
 Safety features:
 - Preflight health check (catches bad keys, rate limits, deprecated models)
