@@ -132,7 +132,7 @@ if [ "$FILTER" = "all" ] || [ "$FILTER" = "gemini" ]; then
 fi
 
 if [ "$FILTER" = "all" ] || [ "$FILTER" = "deepseek" ]; then
-    run_model "deepseek-v4" "DeepSeek V4"
+    run_model "deepseek-v4-flash" "DeepSeek V4 Flash"
 fi
 
 echo ""
