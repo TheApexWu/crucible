@@ -157,15 +157,51 @@ async def main():
     print(f"Round timeout: {args.round_timeout}s | Ctrl+C for graceful shutdown")
     print("=" * 60)
 
-    # === PREFLIGHT (no retries -- fail fast) ===
+    # === PREFLIGHT (synchronous, no retries, no event loop tricks) ===
     print(f"[preflight] Testing {model_name}...", end=" ", flush=True)
     try:
-        from engine.game import llm_call
-        test_resp = await asyncio.wait_for(llm_call("Say OK.", agent_label="preflight", max_retries=1), timeout=30)
-        print(f"OK ({len(test_resp)} chars)")
-    except asyncio.TimeoutError:
-        print("FAILED (timeout after 30s)")
-        sys.exit(1)
+        from engine.game import _provider, _get_openai_client, _get_anthropic_client, _get_gemini_client
+        import httpx
+
+        if _provider == "google":
+            client = _get_gemini_client()
+            # Sync call via httpx
+            resp = httpx.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
+                json={"contents": [{"parts": [{"text": "Say OK."}]}]},
+                params={"key": os.environ["GEMINI_API_KEY"]},
+                timeout=30,
+            )
+            if resp.status_code == 200:
+                print(f"OK (google, {resp.status_code})")
+            else:
+                print(f"FAILED (google, {resp.status_code}: {resp.text[:200]})")
+                sys.exit(1)
+        elif _provider == "anthropic":
+            import anthropic
+            client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+            resp = client.messages.create(
+                model=model_name, max_tokens=10,
+                messages=[{"role": "user", "content": "Say OK."}],
+            )
+            print(f"OK ({len(resp.content[0].text)} chars)")
+        elif _provider == "openai":
+            import openai
+            if model_name.startswith("deepseek"):
+                client = openai.OpenAI(
+                    api_key=os.environ["DEEPSEEK_API_KEY"],
+                    base_url="https://api.deepseek.com",
+                )
+            else:
+                client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+            resp = client.chat.completions.create(
+                model=model_name, max_completion_tokens=10,
+                messages=[{"role": "user", "content": "Say OK."}],
+            )
+            print(f"OK ({len(resp.choices[0].message.content)} chars)")
+        else:
+            print(f"FAILED (unknown provider: {_provider})")
+            sys.exit(1)
     except Exception as e:
         print(f"FAILED ({e})")
         sys.exit(1)
