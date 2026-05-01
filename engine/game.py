@@ -89,7 +89,7 @@ async def _call_openai(prompt: str) -> str:
     response = await client.chat.completions.create(
         model=model_name,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=1024,
+        max_completion_tokens=1024,
     )
     return response.choices[0].message.content or ""
 
