@@ -54,8 +54,12 @@ run_seed() {
     else
         local elapsed=$(( $(date +%s) - start ))
         err "FAILED: $model s$seed refl=$refl_label (${elapsed}s)"
-        echo "$model s$seed refl=$refl_label FAILED" >> data/runs/failures.log
+        echo "$model s$seed refl=$refl_label FAILED at $(date)" >> data/runs/failures.log
     fi
+
+    # MANDATORY cooldown between runs to avoid rate limit cascades
+    warn "Cooldown: waiting 120s before next run..."
+    sleep 120
 }
 
 run_model() {

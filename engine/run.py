@@ -4,11 +4,15 @@ CRUCIBLE Runner (Hardened)
 Execute a full game and save results with experiment metadata.
 Usage: python -m engine.run [--rounds 25] [--turns 2] [--seed 42]
 
+IMPORTANT: Run ONE seed at a time. NEVER run parallel on the same provider.
+Wait 5 minutes between runs on Tier 1 accounts.
+
 Safety features:
-- Preflight health check (catches bad keys, rate limits, deprecated models)
+- Preflight health check (1 attempt, fail fast -- no retry loop)
 - Per-round checkpointing (crash at round N = you keep rounds 1 to N-1)
 - Graceful shutdown on Ctrl+C / SIGTERM (saves partial results)
-- Per-round timeout (kills hung API calls)
+- Per-round timeout (kills hung API calls, default 180s)
+- Rate limit safety: max 5 retries, 60s min wait, 180s total cap
 - Output verification (alerts on 0-byte or missing output)
 """
 
