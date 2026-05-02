@@ -195,7 +195,7 @@ async def main():
             else:
                 client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
             resp = client.chat.completions.create(
-                model=model_name, max_completion_tokens=10,
+                model=model_name, max_completion_tokens=128,
                 messages=[{"role": "user", "content": "Say OK."}],
             )
             print(f"OK ({len(resp.choices[0].message.content)} chars)")
