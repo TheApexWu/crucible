@@ -66,8 +66,8 @@ def dd_workflow(name: str):
     return decorator
 
 
-def dd_llm_span(name: str, model_name: str = "gemini-2.0-flash", model_provider: str = "google"):
-    """Decorator: LLM call span."""
+def dd_llm_span(name: str, model_name: str, model_provider: str):
+    """Decorator: LLM call span. Caller supplies the model and provider for accurate trace metadata."""
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):

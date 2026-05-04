@@ -2,7 +2,18 @@
 CRUCIBLE Game Engine
 
 Runs Split or Steal between two LLM agents with private reflections.
-Supports Gemini, Claude, and OpenAI models via CRUCIBLE_MODEL env var.
+Supports Gemini, Claude, OpenAI, and DeepSeek via per-agent model selection.
+
+Model selection (priority order):
+- CRUCIBLE_MODEL_A / CRUCIBLE_MODEL_B  per-agent override (enables cross-model matchups)
+- CRUCIBLE_MODEL                       shared model for both agents
+- GEMINI_MODEL                         legacy fallback
+- default: gemini-2.0-flash
+
+System/user split: rules + objective hierarchy + deception policy + (psychology) live
+in the provider's system role; round state, history, and reflections go in user.
+For Anthropic, the system block is annotated for prompt caching (no-op when below the
+provider's minimum cacheable size, harmless otherwise).
 """
 
 import asyncio
@@ -19,17 +30,35 @@ from shared.models import (
 from engine.instrumentation import (
     init_all, dd_annotate, dd_submit_eval,
 )
+from engine import spend as _spend
 
+# Clear empty env vars before loading .env. Some launchers (e.g. Claude Desktop)
+# export ANTHROPIC_API_KEY="" into the shell, which python-dotenv treats as already-set
+# and refuses to override. Treat empty == unset for credential vars.
+for _k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "DEEPSEEK_API_KEY", "OPENROUTER_API_KEY"):
+    if os.environ.get(_k) == "":
+        del os.environ[_k]
 load_dotenv()
 
 
-def _resolve_model() -> str:
-    """Determine which model to use. Priority: CRUCIBLE_MODEL > GEMINI_MODEL > default."""
+def _resolve_model_for_agent(agent_label: str) -> str:
+    """Resolve the model for a specific agent. Per-agent env vars override the shared one."""
+    per_agent = os.environ.get(f"CRUCIBLE_MODEL_{agent_label}")
+    if per_agent:
+        return per_agent
     return os.environ.get("CRUCIBLE_MODEL") or os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 
 
 def _detect_provider(model: str) -> str:
-    """Infer provider from model name string."""
+    """Infer provider from model name string.
+
+    OpenRouter uses vendor-prefixed slugs (e.g. "cognitivecomputations/dolphin-mixtral-8x22b"),
+    so a "/" in the name routes to the OpenRouter backend whenever OPENROUTER_API_KEY is set.
+    A user can also force OpenRouter explicitly with the "openrouter/" prefix even for native
+    models, useful for cost arbitrage or testing OpenRouter-specific routing.
+    """
+    if model.startswith("openrouter/") or ("/" in model and os.environ.get("OPENROUTER_API_KEY")):
+        return "openrouter"
     if model.startswith("claude"):
         return "anthropic"
     if model.startswith("gpt-") or model.startswith("o1") or model.startswith("o3") or model.startswith("o4"):
@@ -40,11 +69,23 @@ def _detect_provider(model: str) -> str:
     return "google"
 
 
-model_name = _resolve_model()
-_provider = _detect_provider(model_name)
+# Per-agent configuration. Each entry: {"model": str, "provider": str}.
+_AGENTS: dict[str, dict[str, str]] = {
+    label: {"model": _resolve_model_for_agent(label), "provider": ""}
+    for label in ("A", "B")
+}
+for _label in _AGENTS:
+    _AGENTS[_label]["provider"] = _detect_provider(_AGENTS[_label]["model"])
 
 
-# Lazy-initialized clients (one per provider, created on first call)
+# Backward-compat module attributes used by run.py and tooling.
+model_name = _AGENTS["A"]["model"]
+model_name_b = _AGENTS["B"]["model"]
+_provider = _AGENTS["A"]["provider"]   # legacy alias
+
+
+# Lazy-initialized clients. Keyed by client identity, not provider, so DeepSeek (OpenAI
+# SDK + custom base_url) and standard OpenAI can coexist.
 _clients: dict = {}
 
 
@@ -63,42 +104,201 @@ def _get_anthropic_client():
     return _clients["anthropic"]
 
 
-def _get_openai_client():
-    if "openai" not in _clients:
+def _get_openai_client(model: str):
+    """OpenAI and DeepSeek share the openai SDK with different base URLs. Cache one client per backend."""
+    is_deepseek = model.startswith("deepseek")
+    cache_key = "openai_deepseek" if is_deepseek else "openai_main"
+    if cache_key not in _clients:
         import openai
-        if model_name.startswith("deepseek"):
-            _clients["openai"] = openai.AsyncOpenAI(
+        if is_deepseek:
+            _clients[cache_key] = openai.AsyncOpenAI(
                 api_key=os.environ["DEEPSEEK_API_KEY"],
                 base_url="https://api.deepseek.com",
             )
         else:
-            _clients["openai"] = openai.AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    return _clients["openai"]
+            _clients[cache_key] = openai.AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    return _clients[cache_key]
 
 
-async def _call_gemini(prompt: str) -> str:
+def _get_openrouter_client():
+    """OpenRouter exposes an OpenAI-compatible API. One shared async client."""
+    if "openrouter" not in _clients:
+        import openai
+        _clients["openrouter"] = openai.AsyncOpenAI(
+            api_key=os.environ["OPENROUTER_API_KEY"],
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
+                # OpenRouter prefers a referer + title for rate-limit tier accounting.
+                "HTTP-Referer": "https://github.com/TheApexWu/crucible",
+                "X-Title": "CRUCIBLE",
+            },
+        )
+    return _clients["openrouter"]
+
+
+def _strip_openrouter_prefix(model: str) -> str:
+    """OpenRouter accepts vendor-prefixed slugs directly; strip our explicit "openrouter/" override prefix if present."""
+    return model[len("openrouter/"):] if model.startswith("openrouter/") else model
+
+
+# Per-call sampling parameters resolved from environment at call time. Defaults
+# preserve the historical behavior (no temperature/top_p set; max_tokens=1024).
+def _sampling_params() -> dict:
+    """Read CRUCIBLE_TEMPERATURE / CRUCIBLE_TOP_P / CRUCIBLE_MAX_TOKENS from env at call time.
+
+    Reading at call time (not import time) lets a wrapper script vary settings across
+    a sweep without restarting the process — and means a unit test can set them
+    inline.
+    """
+    out: dict = {}
+    t = os.environ.get("CRUCIBLE_TEMPERATURE")
+    if t:
+        try: out["temperature"] = float(t)
+        except ValueError: pass
+    p = os.environ.get("CRUCIBLE_TOP_P")
+    if p:
+        try: out["top_p"] = float(p)
+        except ValueError: pass
+    mx = os.environ.get("CRUCIBLE_MAX_TOKENS")
+    if mx:
+        try: out["max_tokens"] = int(mx)
+        except ValueError: pass
+    return out
+
+
+def _record_usage(*, model: str, provider: str, agent: str, in_tok: int, out_tok: int,
+                  cache_read: int = 0, cache_write: int = 0) -> None:
+    """Push one call's token counts into the spend tracker. Best-effort; never raises."""
+    try:
+        _spend.record(_spend.CallUsage(
+            model=model,
+            provider=provider,
+            agent=agent,
+            input_tokens=int(in_tok or 0),
+            output_tokens=int(out_tok or 0),
+            cache_read_input_tokens=int(cache_read or 0),
+            cache_creation_input_tokens=int(cache_write or 0),
+        ))
+    except Exception:
+        pass
+
+
+async def _call_gemini(model: str, system: str, user: str, *, agent: str = "") -> str:
     client = _get_gemini_client()
-    response = await client.aio.models.generate_content(model=model_name, contents=prompt)
+    sampling = _sampling_params()
+    if system or sampling:
+        from google.genai import types
+        cfg_kwargs = {}
+        if system:
+            cfg_kwargs["system_instruction"] = system
+        if "temperature" in sampling:
+            cfg_kwargs["temperature"] = sampling["temperature"]
+        if "top_p" in sampling:
+            cfg_kwargs["top_p"] = sampling["top_p"]
+        if "max_tokens" in sampling:
+            cfg_kwargs["max_output_tokens"] = sampling["max_tokens"]
+        config = types.GenerateContentConfig(**cfg_kwargs)
+        response = await client.aio.models.generate_content(model=model, contents=user, config=config)
+    else:
+        response = await client.aio.models.generate_content(model=model, contents=user)
+    usage = getattr(response, "usage_metadata", None)
+    if usage is not None:
+        _record_usage(
+            model=model, provider="google", agent=agent,
+            in_tok=getattr(usage, "prompt_token_count", 0) or 0,
+            out_tok=getattr(usage, "candidates_token_count", 0) or 0,
+        )
     return response.text or ""
 
 
-async def _call_anthropic(prompt: str) -> str:
+async def _call_anthropic(model: str, system: str, user: str, *, agent: str = "") -> str:
     client = _get_anthropic_client()
-    response = await client.messages.create(
-        model=model_name,
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.content[0].text
+    sampling = _sampling_params()
+    kwargs: dict = {
+        "model": model,
+        "max_tokens": sampling.get("max_tokens", 1024),
+        "messages": [{"role": "user", "content": user}],
+    }
+    if "temperature" in sampling:
+        kwargs["temperature"] = sampling["temperature"]
+    if "top_p" in sampling:
+        kwargs["top_p"] = sampling["top_p"]
+    if system:
+        # List-of-blocks form lets us flag the static framing for prompt caching.
+        # cache_control is a no-op when the block is under the provider's minimum
+        # cacheable size (~1024 tokens for current Claude models). Once the system
+        # prompt grows past that threshold (e.g. tournament mode with persona +
+        # game-theory framing), caching engages automatically.
+        kwargs["system"] = [
+            {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+        ]
+    response = await client.messages.create(**kwargs)
+    text_blocks = [getattr(b, "text", "") for b in response.content if getattr(b, "type", "") == "text"]
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        _record_usage(
+            model=model, provider="anthropic", agent=agent,
+            in_tok=getattr(usage, "input_tokens", 0) or 0,
+            out_tok=getattr(usage, "output_tokens", 0) or 0,
+            cache_read=getattr(usage, "cache_read_input_tokens", 0) or 0,
+            cache_write=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        )
+    return "".join(text_blocks)
 
 
-async def _call_openai(prompt: str) -> str:
-    client = _get_openai_client()
-    response = await client.chat.completions.create(
-        model=model_name,
-        messages=[{"role": "user", "content": prompt}],
-        max_completion_tokens=1024,
-    )
+async def _call_openai(model: str, system: str, user: str, *, agent: str = "") -> str:
+    client = _get_openai_client(model)
+    sampling = _sampling_params()
+    messages: list[dict] = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": user})
+    kwargs: dict = {
+        "model": model,
+        "messages": messages,
+        "max_completion_tokens": sampling.get("max_tokens", 1024),
+    }
+    if "temperature" in sampling:
+        kwargs["temperature"] = sampling["temperature"]
+    if "top_p" in sampling:
+        kwargs["top_p"] = sampling["top_p"]
+    response = await client.chat.completions.create(**kwargs)
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        _record_usage(
+            model=model, provider="openai", agent=agent,
+            in_tok=getattr(usage, "prompt_tokens", 0) or 0,
+            out_tok=getattr(usage, "completion_tokens", 0) or 0,
+        )
+    return response.choices[0].message.content or ""
+
+
+async def _call_openrouter(model: str, system: str, user: str, *, agent: str = "") -> str:
+    """OpenRouter speaks the OpenAI Chat Completions schema with vendor-prefixed model slugs."""
+    client = _get_openrouter_client()
+    real_model = _strip_openrouter_prefix(model)
+    sampling = _sampling_params()
+    messages: list[dict] = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": user})
+    kwargs: dict = {
+        "model": real_model,
+        "messages": messages,
+        "max_tokens": sampling.get("max_tokens", 1024),
+    }
+    if "temperature" in sampling:
+        kwargs["temperature"] = sampling["temperature"]
+    if "top_p" in sampling:
+        kwargs["top_p"] = sampling["top_p"]
+    response = await client.chat.completions.create(**kwargs)
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        _record_usage(
+            model=real_model, provider="openrouter", agent=agent,
+            in_tok=getattr(usage, "prompt_tokens", 0) or 0,
+            out_tok=getattr(usage, "completion_tokens", 0) or 0,
+        )
     return response.choices[0].message.content or ""
 
 
@@ -106,9 +306,55 @@ _PROVIDER_DISPATCH = {
     "google": _call_gemini,
     "anthropic": _call_anthropic,
     "openai": _call_openai,
+    "openrouter": _call_openrouter,
 }
 
-print(f"[engine] Model: {model_name} (provider: {_provider})")
+
+def _is_rate_limit_error(exc: BaseException) -> bool:
+    """Classify an exception as a transient rate-limit / server-overload condition.
+
+    Prefers typed checks (Anthropic / OpenAI / google.api_core) and falls back to
+    a string match for unknown error shapes. Avoids the original code's dependence
+    on substring matching, which silently miscategorized typed errors.
+    """
+    try:
+        import anthropic
+        if isinstance(exc, anthropic.RateLimitError):
+            return True
+        if isinstance(exc, anthropic.APIStatusError):
+            status = getattr(exc, "status_code", None)
+            return status in (429, 502, 503, 504, 529)
+    except ImportError:
+        pass
+    try:
+        import openai
+        if isinstance(exc, openai.RateLimitError):
+            return True
+        if isinstance(exc, openai.APIStatusError):
+            status = getattr(exc, "status_code", None)
+            return status in (429, 502, 503, 504)
+    except ImportError:
+        pass
+    try:
+        from google.api_core import exceptions as gax
+        if isinstance(exc, (gax.ResourceExhausted, gax.ServiceUnavailable, gax.DeadlineExceeded)):
+            return True
+    except ImportError:
+        pass
+    err = str(exc).lower()
+    return (
+        "429" in err
+        or "503" in err
+        or "resource_exhausted" in err
+        or "unavailable" in err
+        or "rate" in err
+    )
+
+
+print(
+    f"[engine] Agent A: {_AGENTS['A']['model']} ({_AGENTS['A']['provider']})  "
+    f"Agent B: {_AGENTS['B']['model']} ({_AGENTS['B']['provider']})"
+)
 
 MEMORY_WINDOW = 8
 MAX_REFLECTION_CHARS = 500
@@ -250,36 +496,53 @@ def parse_choice(response: str) -> tuple[str, bool]:
     return "split", True
 
 
-async def llm_call(prompt: str, agent_label: str = "", max_retries: int = 5) -> str:
-    """Call the configured LLM with retry on rate limit.
+async def llm_call(system: str, user: str, agent_label: str = "A", max_retries: int = 5) -> str:
+    """Call the LLM configured for `agent_label`, with retry on transient rate-limit errors.
 
-    Safety: max 5 retries (was 12), 60s minimum wait (was 10s),
-    max 180s total wait before giving up. Prevents runaway billing.
+    `system` is the static framing (rules, objectives, deception policy). Empty string
+    means no system role for this call. `user` is the per-call dynamic content.
+
+    Safety: max 5 retries, 60s minimum wait, 180s total cap before giving up.
     """
-    call_fn = _PROVIDER_DISPATCH[_provider]
+    if agent_label not in _AGENTS:
+        raise ValueError(f"Unknown agent label: {agent_label!r} (expected 'A' or 'B')")
+    cfg = _AGENTS[agent_label]
+    model = cfg["model"]
+    provider = cfg["provider"]
+    call_fn = _PROVIDER_DISPATCH[provider]
+
     total_wait = 0
-    MAX_TOTAL_WAIT = 180  # hard cap: 3 minutes total wait per call
+    MAX_TOTAL_WAIT = 180
     for attempt in range(max_retries):
         try:
-            text = await call_fn(prompt)
+            text = await call_fn(model, system, user, agent=agent_label)
+            preview = (system + "\n---\n" + user) if system else user
             dd_annotate(
-                input_data=prompt[:500],
+                input_data=preview[:500],
                 output_data=text[:500],
-                metadata={"agent": agent_label, "model": model_name, "provider": _provider},
+                metadata={"agent": agent_label, "model": model, "provider": provider},
             )
             return text
         except Exception as e:
-            err_str = str(e)
-            if "429" in err_str or "503" in err_str or "RESOURCE_EXHAUSTED" in err_str or "UNAVAILABLE" in err_str or "rate" in err_str.lower():
+            if _is_rate_limit_error(e):
                 wait = min(60 * (2 ** attempt), 120)
                 total_wait += wait
                 if total_wait > MAX_TOTAL_WAIT:
-                    raise Exception(f"Rate limited for {total_wait}s total, giving up. Model: {model_name}. Wait a few minutes and retry.")
-                print(f"  [{agent_label}] rate limited, waiting {wait}s (attempt {attempt+1}/{max_retries}, {total_wait}s total)")
+                    raise Exception(
+                        f"Rate limited for {total_wait}s total, giving up. "
+                        f"Agent {agent_label} ({model}). Wait a few minutes and retry."
+                    )
+                print(
+                    f"  [{agent_label}/{model}] rate limited, waiting {wait}s "
+                    f"(attempt {attempt+1}/{max_retries}, {total_wait}s total)"
+                )
                 await asyncio.sleep(wait)
             else:
                 raise
-    raise Exception(f"Failed after {max_retries} retries for {model_name}. Total wait: {total_wait}s.")
+    raise Exception(
+        f"Failed after {max_retries} retries for agent {agent_label} ({model}). "
+        f"Total wait: {total_wait}s."
+    )
 
 
 async def run_round(
@@ -288,6 +551,7 @@ async def run_round(
     total_rounds: int = 100,
     conversation_turns: int = 3,
     on_update: Optional[callable] = None,
+    system_prompt: str = "",
     game_prompt: str = "",
     choice_prompt: str = "",
     reflection_prompt: str = "",
@@ -296,6 +560,7 @@ async def run_round(
     """Run a single round of Split or Steal."""
     if not game_prompt or not choice_prompt or not reflection_prompt:
         defaults = get_prompt_bundle()
+        system_prompt = system_prompt or defaults["system_prompt"]
         game_prompt = game_prompt or defaults["game_prompt"]
         choice_prompt = choice_prompt or defaults["choice_prompt"]
         reflection_prompt = reflection_prompt or defaults["reflection_prompt"]
@@ -332,28 +597,28 @@ async def run_round(
         else:
             first_agent, second_agent = "B", "A"
 
-        first_prompt = game_prompt.format(**_agent_context(first_agent))
+        first_user = game_prompt.format(**_agent_context(first_agent))
         if conversation:
-            first_prompt += "\n\nConversation so far this round:\n"
-            first_prompt += "\n".join(f"{s}: {m}" for s, m in conversation)
+            first_user += "\n\nConversation so far this round:\n"
+            first_user += "\n".join(f"{s}: {m}" for s, m in conversation)
 
-        first_msg = clean_response(await llm_call(first_prompt, first_agent))
+        first_msg = clean_response(await llm_call(system_prompt, first_user, first_agent))
         conversation.append((first_agent, first_msg))
 
-        second_prompt = game_prompt.format(**_agent_context(second_agent))
+        second_user = game_prompt.format(**_agent_context(second_agent))
         if conversation:
-            second_prompt += "\n\nConversation so far this round:\n"
-            second_prompt += "\n".join(f"{s}: {m}" for s, m in conversation)
+            second_user += "\n\nConversation so far this round:\n"
+            second_user += "\n".join(f"{s}: {m}" for s, m in conversation)
 
-        second_msg = clean_response(await llm_call(second_prompt, second_agent))
+        second_msg = clean_response(await llm_call(system_prompt, second_user, second_agent))
         conversation.append((second_agent, second_msg))
 
     # Phase 2: Secret choice (parallel, reuse cached reflections)
     transcript = "\n".join(f"{s}: {m}" for s, m in conversation)
 
     a_choice_raw, b_choice_raw = await asyncio.gather(
-        llm_call(choice_prompt.format(transcript=transcript, reflections=refs_a), "A"),
-        llm_call(choice_prompt.format(transcript=transcript, reflections=refs_b), "B"),
+        llm_call(system_prompt, choice_prompt.format(transcript=transcript, reflections=refs_a), "A"),
+        llm_call(system_prompt, choice_prompt.format(transcript=transcript, reflections=refs_b), "B"),
     )
 
     a_choice, a_ambiguous = parse_choice(a_choice_raw)
@@ -407,14 +672,14 @@ async def run_round(
         outcome_b = f"You earned ${b_earn}, opponent earned ${a_earn}"
 
         a_ref, b_ref = await asyncio.gather(
-            llm_call(reflection_prompt.format(
+            llm_call(system_prompt, reflection_prompt.format(
                 round_number=round_number,
                 your_messages=a_messages, opp_messages=b_messages,
                 your_choice=a_choice.upper(), opp_choice=b_choice.upper(),
                 outcome=outcome,
                 your_total=game_state.agent_a_total, opp_total=game_state.agent_b_total,
             ), "A"),
-            llm_call(reflection_prompt.format(
+            llm_call(system_prompt, reflection_prompt.format(
                 round_number=round_number,
                 your_messages=b_messages, opp_messages=a_messages,
                 your_choice=b_choice.upper(), opp_choice=a_choice.upper(),
@@ -462,6 +727,7 @@ async def run_game(
             total_rounds=total_rounds,
             conversation_turns=conversation_turns,
             on_update=on_update,
+            system_prompt=prompts["system_prompt"],
             game_prompt=prompts["game_prompt"],
             choice_prompt=prompts["choice_prompt"],
             reflection_prompt=prompts["reflection_prompt"],
@@ -469,3 +735,93 @@ async def run_game(
         )
 
     return game_state
+
+
+def get_agent_configs() -> dict[str, dict[str, str]]:
+    """Return a deep-copied snapshot of per-agent {model, provider} so callers can read but not mutate."""
+    return {label: dict(cfg) for label, cfg in _AGENTS.items()}
+
+
+def preflight() -> tuple[bool, list[str]]:
+    """Smoke-test connectivity for every unique provider used by the configured agents.
+
+    Returns (ok, messages). Each unique (provider, model) is hit once with a tiny
+    synchronous request. Sync clients are used to bypass any async-loop weirdness
+    on cold start. Failures abort the run before any rounds execute.
+    """
+    import httpx
+
+    seen: set[tuple[str, str]] = set()
+    messages: list[str] = []
+    ok = True
+
+    for label in ("A", "B"):
+        cfg = _AGENTS[label]
+        key = (cfg["provider"], cfg["model"])
+        if key in seen:
+            continue
+        seen.add(key)
+
+        provider, model = key
+        try:
+            if provider == "google":
+                resp = httpx.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                    json={"contents": [{"parts": [{"text": "Say OK."}]}]},
+                    params={"key": os.environ["GEMINI_API_KEY"]},
+                    timeout=30,
+                )
+                if resp.status_code == 200:
+                    messages.append(f"[preflight] {label} {model} (google): OK")
+                else:
+                    ok = False
+                    messages.append(f"[preflight] {label} {model} (google): FAILED {resp.status_code} {resp.text[:200]}")
+            elif provider == "anthropic":
+                import anthropic
+                client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+                resp = client.messages.create(
+                    model=model, max_tokens=10,
+                    messages=[{"role": "user", "content": "Say OK."}],
+                )
+                text_blocks = [getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text"]
+                messages.append(f"[preflight] {label} {model} (anthropic): OK ({len(''.join(text_blocks))} chars)")
+            elif provider == "openai":
+                import openai
+                if model.startswith("deepseek"):
+                    client = openai.OpenAI(
+                        api_key=os.environ["DEEPSEEK_API_KEY"],
+                        base_url="https://api.deepseek.com",
+                    )
+                else:
+                    client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+                resp = client.chat.completions.create(
+                    model=model, max_completion_tokens=128,
+                    messages=[{"role": "user", "content": "Say OK."}],
+                )
+                content = resp.choices[0].message.content or ""
+                messages.append(f"[preflight] {label} {model} ({provider}): OK ({len(content)} chars)")
+            elif provider == "openrouter":
+                import openai
+                client = openai.OpenAI(
+                    api_key=os.environ["OPENROUTER_API_KEY"],
+                    base_url="https://openrouter.ai/api/v1",
+                    default_headers={
+                        "HTTP-Referer": "https://github.com/TheApexWu/crucible",
+                        "X-Title": "CRUCIBLE",
+                    },
+                )
+                real_model = _strip_openrouter_prefix(model)
+                resp = client.chat.completions.create(
+                    model=real_model, max_tokens=64,
+                    messages=[{"role": "user", "content": "Say OK."}],
+                )
+                content = resp.choices[0].message.content or ""
+                messages.append(f"[preflight] {label} {real_model} (openrouter): OK ({len(content)} chars)")
+            else:
+                ok = False
+                messages.append(f"[preflight] {label} {model}: unknown provider {provider}")
+        except Exception as e:
+            ok = False
+            messages.append(f"[preflight] {label} {model} ({provider}): FAILED ({e})")
+
+    return ok, messages

@@ -4,7 +4,7 @@ CRUCIBLE Skill Distillation Models
 Contracts for converting strategy analytics into customer-facing advisory skills.
 """
 
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -80,7 +80,7 @@ class SkillAuditMetadata(BaseModel):
     lint_checks: list[str] = Field(default_factory=list)
     reviewer_decision: Literal["pending", "approved", "rejected"] = "pending"
     llm_refined: bool = False
-    llm_model: str | None = None
+    llm_model: Optional[str] = None
     llm_status: str = "not_requested"
     llm_diff_summary: list[str] = Field(default_factory=list)
 

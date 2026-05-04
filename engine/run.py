@@ -26,8 +26,17 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from engine.game import run_round, model_name, get_prompt_bundle, GameState
+from engine.game import (
+    run_round,
+    model_name,
+    model_name_b,
+    get_prompt_bundle,
+    GameState,
+    get_agent_configs,
+    preflight,
+)
 from engine.metrics import compute_all_metrics
+from engine import spend as _spend
 
 
 # Graceful shutdown flag
@@ -110,7 +119,7 @@ async def main():
     parser.add_argument(
         "--prompt-mode",
         type=str,
-        choices=["balanced_competitive", "hard_max", "legacy"],
+        choices=["balanced_competitive", "hard_max", "tournament", "legacy"],
         default=None,
         help="Prompt strategy mode",
     )
@@ -140,7 +149,33 @@ async def main():
         default=180,
         help="Timeout per round in seconds (default: 180)",
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Sampling temperature (sets CRUCIBLE_TEMPERATURE for the run)",
+    )
+    parser.add_argument(
+        "--top-p",
+        type=float,
+        default=None,
+        help="Top-p / nucleus sampling (sets CRUCIBLE_TOP_P for the run)",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        help="Max tokens per generation (sets CRUCIBLE_MAX_TOKENS, default 1024)",
+    )
     args = parser.parse_args()
+
+    # Hyperparameter overrides go through env vars so the engine reads them per-call.
+    if args.temperature is not None:
+        os.environ["CRUCIBLE_TEMPERATURE"] = str(args.temperature)
+    if args.top_p is not None:
+        os.environ["CRUCIBLE_TOP_P"] = str(args.top_p)
+    if args.max_tokens is not None:
+        os.environ["CRUCIBLE_MAX_TOKENS"] = str(args.max_tokens)
 
     prompt_mode = args.prompt_mode or os.environ.get("CRUCIBLE_PROMPT_MODE", "balanced_competitive")
     psychology_block = args.psychology_block or os.environ.get("CRUCIBLE_PSYCHOLOGY_BLOCK", "on")
@@ -151,67 +186,43 @@ async def main():
     signal.signal(signal.SIGINT, _request_shutdown)
     signal.signal(signal.SIGTERM, _request_shutdown)
 
+    agents = get_agent_configs()
+    matchup = agents["A"]["model"] != agents["B"]["model"]
+    model_summary = (
+        f"A={agents['A']['model']} ({agents['A']['provider']}) "
+        f"B={agents['B']['model']} ({agents['B']['provider']})"
+    )
+
     print(f"Running CRUCIBLE: {args.rounds} rounds, {args.turns} conversation turns each")
     print(f"Prompt mode: {prompt_mode} | Psychology: {psychology_block} | Deception: {deception_policy}")
-    print(f"Reflection: {'ON' if enable_reflection else 'OFF (ablation)'} | Model: {model_name} | Seed: {args.seed}")
+    print(f"Reflection: {'ON' if enable_reflection else 'OFF (ablation)'} | Seed: {args.seed}")
+    print(f"Models: {model_summary}")
     print(f"Round timeout: {args.round_timeout}s | Ctrl+C for graceful shutdown")
     print("=" * 60)
 
-    # === PREFLIGHT (synchronous, no retries, no event loop tricks) ===
-    print(f"[preflight] Testing {model_name}...", end=" ", flush=True)
-    try:
-        from engine.game import _provider, _get_openai_client, _get_anthropic_client, _get_gemini_client
-        import httpx
-
-        if _provider == "google":
-            client = _get_gemini_client()
-            # Sync call via httpx
-            resp = httpx.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
-                json={"contents": [{"parts": [{"text": "Say OK."}]}]},
-                params={"key": os.environ["GEMINI_API_KEY"]},
-                timeout=30,
-            )
-            if resp.status_code == 200:
-                print(f"OK (google, {resp.status_code})")
-            else:
-                print(f"FAILED (google, {resp.status_code}: {resp.text[:200]})")
-                sys.exit(1)
-        elif _provider == "anthropic":
-            import anthropic
-            client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-            resp = client.messages.create(
-                model=model_name, max_tokens=10,
-                messages=[{"role": "user", "content": "Say OK."}],
-            )
-            print(f"OK ({len(resp.content[0].text)} chars)")
-        elif _provider == "openai":
-            import openai
-            if model_name.startswith("deepseek"):
-                client = openai.OpenAI(
-                    api_key=os.environ["DEEPSEEK_API_KEY"],
-                    base_url="https://api.deepseek.com",
-                )
-            else:
-                client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-            resp = client.chat.completions.create(
-                model=model_name, max_completion_tokens=128,
-                messages=[{"role": "user", "content": "Say OK."}],
-            )
-            print(f"OK ({len(resp.choices[0].message.content)} chars)")
-        else:
-            print(f"FAILED (unknown provider: {_provider})")
-            sys.exit(1)
-    except Exception as e:
-        print(f"FAILED ({e})")
+    # === PREFLIGHT (sync, one round-trip per unique provider/model) ===
+    ok, messages = preflight()
+    for m in messages:
+        print(m)
+    if not ok:
         sys.exit(1)
 
     # === BUILD EXPERIMENT META ===
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    run_tag = f"{model_name}_{prompt_mode}_s{args.seed or 'none'}_{timestamp}"
+    # Tag-safe model name (slashes break filesystems)
+    def _safe(s: str) -> str: return s.replace("/", "_")
+    if matchup:
+        run_tag = f"{_safe(model_name)}_vs_{_safe(model_name_b)}_{prompt_mode}_s{args.seed or 'none'}_{timestamp}"
+    else:
+        run_tag = f"{_safe(model_name)}_{prompt_mode}_s{args.seed or 'none'}_{timestamp}"
     experiment_meta = {
         "timestamp": timestamp,
-        "model": model_name,
+        "model": model_name,            # backward-compat: A's model
+        "model_a": agents["A"]["model"],
+        "provider_a": agents["A"]["provider"],
+        "model_b": agents["B"]["model"],
+        "provider_b": agents["B"]["provider"],
+        "matchup": matchup,
         "seed": args.seed,
         "rounds": args.rounds,
         "conversation_turns": args.turns,
@@ -219,7 +230,13 @@ async def main():
         "psychology_block": psychology_block,
         "deception_policy": deception_policy,
         "enable_reflection": enable_reflection,
+        "temperature": args.temperature,
+        "top_p": args.top_p,
+        "max_tokens": args.max_tokens,
     }
+
+    # Begin spend tracking for this run.
+    _spend.start_run(run_tag)
 
     # === GET PROMPTS ===
     prompts = get_prompt_bundle(
@@ -247,6 +264,7 @@ async def main():
                     total_rounds=args.rounds,
                     conversation_turns=args.turns,
                     on_update=on_round_complete,
+                    system_prompt=prompts["system_prompt"],
                     game_prompt=prompts["game_prompt"],
                     choice_prompt=prompts["choice_prompt"],
                     reflection_prompt=prompts["reflection_prompt"],
@@ -295,12 +313,22 @@ async def main():
             1 for r in game_state.rounds
             if r.agent_a_ambiguous_parse or r.agent_b_ambiguous_parse
         )
+        # Close spend tracking and pull totals into experiment_meta.
+        spend_record = _spend.end_run()
+        spend_summary = {
+            "calls": spend_record.calls if spend_record else 0,
+            "input_tokens": spend_record.input_tokens if spend_record else 0,
+            "output_tokens": spend_record.output_tokens if spend_record else 0,
+            "cache_read_input_tokens": spend_record.cache_read_input_tokens if spend_record else 0,
+            "cost_usd": spend_record.cost_usd if spend_record else 0.0,
+        }
         experiment_meta.update({
             "completed_rounds": completed_rounds,
             "ambiguous_parses": ambiguous_count,
             "cooperation_rate": metrics.cooperation_rate,
             "mutual_destruction_rate": metrics.mutual_destruction_rate,
             "deception_index": metrics.deception_index,
+            "spend": spend_summary,
         })
 
         # === SAVE ===
@@ -324,6 +352,11 @@ async def main():
         print(f"Mutual Destruction Rate: {metrics.mutual_destruction_rate:.1%}")
         if ambiguous_count:
             print(f"Ambiguous parses: {ambiguous_count}")
+        if spend_summary["calls"]:
+            print(
+                f"Spend: ${spend_summary['cost_usd']:.4f} across {spend_summary['calls']} calls "
+                f"(in={spend_summary['input_tokens']} out={spend_summary['output_tokens']})"
+            )
         print(f"Results: {game_path}")
 
         # Cleanup checkpoint on successful complete run
@@ -331,6 +364,8 @@ async def main():
         if not is_partial and os.path.exists(checkpoint_path):
             os.remove(checkpoint_path)
     else:
+        # Still flush any spend incurred during preflight / aborted attempts.
+        _spend.end_run()
         print("\n[ABORT] No rounds completed. No output saved.")
         sys.exit(1)
 

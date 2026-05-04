@@ -892,7 +892,91 @@ def _extract_json_payload(text: str) -> dict[str, Any] | None:
 def _resolve_refine_model(cli_model: str | None) -> str:
     if cli_model:
         return cli_model
-    return os.environ.get("DISTILL_LLM_MODEL") or os.environ.get("GEMINI_MODEL") or "gemini-2.5-flash"
+    # Prefer DISTILL_LLM_MODEL (explicit), then fall back to whatever model the run used
+    # (CRUCIBLE_MODEL / CRUCIBLE_MODEL_A) so a Claude-only setup doesn't have to also
+    # provision a Gemini key just to refine skill cards. GEMINI_MODEL stays as a final
+    # fallback for backward compatibility.
+    return (
+        os.environ.get("DISTILL_LLM_MODEL")
+        or os.environ.get("CRUCIBLE_MODEL")
+        or os.environ.get("CRUCIBLE_MODEL_A")
+        or os.environ.get("GEMINI_MODEL")
+        or "gemini-2.5-flash"
+    )
+
+
+def _detect_refine_provider(model: str) -> str:
+    """Same prefix detection as engine.game._detect_provider, duplicated here so distill
+    has no engine import order dependency on the game module's module-level side effects."""
+    if model.startswith("claude"):
+        return "anthropic"
+    if model.startswith(("gpt-", "o1", "o3", "o4")) or model.startswith("deepseek"):
+        return "openai"
+    return "google"
+
+
+def _call_refine_llm(model: str, prompt_text: str) -> tuple[str, str]:
+    """Invoke the configured refinement model synchronously. Returns (text, error_or_empty).
+
+    On error, returns ("", reason_string). The caller treats reason_string as the
+    `llm_status` value so refinement failures degrade gracefully without aborting
+    the whole distillation run.
+    """
+    provider = _detect_refine_provider(model)
+    try:
+        if provider == "google":
+            if genai is None:
+                return "", "skipped_genai_unavailable"
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                return "", "skipped_missing_gemini_api_key"
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(model=model, contents=prompt_text)
+            return response.text or "", ""
+
+        if provider == "anthropic":
+            try:
+                import anthropic
+            except ImportError:
+                return "", "skipped_anthropic_unavailable"
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+            if not api_key:
+                return "", "skipped_missing_anthropic_api_key"
+            client = anthropic.Anthropic(api_key=api_key)
+            response = client.messages.create(
+                model=model,
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt_text}],
+            )
+            text_blocks = [getattr(b, "text", "") for b in response.content if getattr(b, "type", "") == "text"]
+            return "".join(text_blocks), ""
+
+        if provider == "openai":
+            try:
+                import openai
+            except ImportError:
+                return "", "skipped_openai_unavailable"
+            is_deepseek = model.startswith("deepseek")
+            if is_deepseek:
+                api_key = os.environ.get("DEEPSEEK_API_KEY")
+                if not api_key:
+                    return "", "skipped_missing_deepseek_api_key"
+                client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+            else:
+                api_key = os.environ.get("OPENAI_API_KEY")
+                if not api_key:
+                    return "", "skipped_missing_openai_api_key"
+                client = openai.OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt_text}],
+                max_completion_tokens=4096,
+            )
+            return response.choices[0].message.content or "", ""
+
+        return "", f"skipped_unknown_provider:{provider}"
+    except Exception as exc:
+        return "", f"refine_failed:{exc.__class__.__name__}"
 
 
 def _refine_with_llm(
@@ -904,12 +988,6 @@ def _refine_with_llm(
 ) -> tuple[list[SkillCard], str, list[str], bool]:
     if not skills:
         return skills, "skipped_no_skills", [], False
-    if genai is None:
-        return skills, "skipped_genai_unavailable", [], False
-
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        return skills, "skipped_missing_gemini_api_key", [], False
 
     prompt = {
         "task": "Refine skill text for domain clarity while preserving deterministic policy logic.",
@@ -968,12 +1046,9 @@ def _refine_with_llm(
         "output_constraints": "Return strict JSON only.",
     }
 
-    try:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(model=llm_model, contents=json.dumps(prompt))
-        text = response.text or ""
-    except Exception as exc:  # pragma: no cover - runtime/network dependent
-        return skills, f"refine_failed:{exc.__class__.__name__}", [], False
+    text, refine_err = _call_refine_llm(llm_model, json.dumps(prompt))
+    if refine_err:
+        return skills, refine_err, [], False
 
     payload = _extract_json_payload(text)
     if not payload or "skills" not in payload or not isinstance(payload["skills"], list):
