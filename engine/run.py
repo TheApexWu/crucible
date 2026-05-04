@@ -242,13 +242,19 @@ async def main():
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     # Tag-safe model name (slashes break filesystems)
     def _safe(s: str) -> str: return s.replace("/", "_")
-    asym_tag = ""
-    if args.system_suffix_a or args.system_suffix_b:
-        asym_tag = "_asym"
+    # Include hyperparameter / asymmetric markers in run_tag so concurrent runs of the same
+    # model/prompt/seed don't collide on identical timestamps. Earlier bug: launching H (T=0.7)
+    # and I (T=1.3) at the same wall-clock second produced identical tags, and I's save
+    # overwrote H's. Now T= and P= and asym tags differentiate.
+    asym_tag = "_asym" if (args.system_suffix_a or args.system_suffix_b) else ""
+    temp_tag = f"_T{args.temperature}" if args.temperature is not None else ""
+    top_p_tag = f"_P{args.top_p}" if args.top_p is not None else ""
+    refl_tag = "_norefl" if not enable_reflection else ""
+    extras = f"{asym_tag}{temp_tag}{top_p_tag}{refl_tag}"
     if matchup:
-        run_tag = f"{_safe(model_name)}_vs_{_safe(model_name_b)}_{prompt_mode}{asym_tag}_s{args.seed or 'none'}_{timestamp}"
+        run_tag = f"{_safe(model_name)}_vs_{_safe(model_name_b)}_{prompt_mode}{extras}_s{args.seed or 'none'}_{timestamp}"
     else:
-        run_tag = f"{_safe(model_name)}_{prompt_mode}{asym_tag}_s{args.seed or 'none'}_{timestamp}"
+        run_tag = f"{_safe(model_name)}_{prompt_mode}{extras}_s{args.seed or 'none'}_{timestamp}"
     experiment_meta = {
         "timestamp": timestamp,
         "model": model_name,            # backward-compat: A's model
