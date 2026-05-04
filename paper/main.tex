@@ -14,10 +14,10 @@
 \usepackage{subcaption}
 \usepackage{xcolor}
 
-\title{Crucible: Emergent Deception and Theory of Mind in LLM Social Dilemmas Through Private Reflection}
+\title{Crucible: Emergent Deception in LLM Social Dilemmas Through Private Reflection}
 
 \author{
-  Alex Amadeus Wu \\
+  Alex Wu \\
   New York University \\
   \texttt{alexandwu2002@gmail.com}
   \And
@@ -30,75 +30,62 @@
 \maketitle
 
 \begin{abstract}
-We present Crucible, an adversarial simulation engine that elicits emergent deception in large language model agents playing an iterated Split or Steal game. Two agents, initialized with identical naive prompts and zero strategic priming, develop deceptive strategies purely through experience and private reflection. Across 100 rounds, we observe a consistent behavioral trajectory: initial cooperation, exploratory betrayal at round 6, retaliatory spirals, and terminal mutual destruction at 86\% rate (Gemini 2.0 Flash). Critically, replacing the underlying model with Gemini 2.5 Flash under identical conditions produces 0\% betrayal and 100\% cooperation across five independent runs, demonstrating that deceptive tendency is a model-level property, not an artifact of the game structure. We introduce a composite Deception Index combining mutual information decay between stated intent and action, strategy entropy, exploitation window dynamics, and language drift. A private reflection ablation isolates reflection as the architectural mechanism enabling emergent theory of mind: without it, agents fail to model opponent behavior and default to naive play. We distill emergent deceptive strategies into deployable defensive skill modules for hardening customer-facing AI agents. All code, prompts, game transcripts, and metric pipelines are released.
+We study whether LLM agents develop deceptive strategies without being instructed to deceive. We introduce Crucible, a framework in which two identical LLM agents play iterated Split or Steal---a Hawk-Dove social dilemma with no dominant strategy---conversing in natural language before each round and optionally reflecting in a private scratchpad the opponent never sees.
+
+We find that deception emerges reliably, but only under a specific combination of conditions. In a $2 \times 2$ design crossing private reflection (on/off) with prompt framing (competitive/neutral), only the cell combining reflection with competitive framing produces deceptive behavior: cooperation drops from 55\% to 15\%, mutual destruction rises to 56\%, and first betrayal occurs by round 2. Neither reflection alone nor competitive framing alone is sufficient. Under neutral framing, agents cooperate at 100\% regardless of reflection. Without reflection, agents under competitive framing still cooperate the majority of the time.
+
+We additionally observe that deception scales with model capability. A smaller model (Gemini 2.5 Flash-Lite) cooperates 76\% of the time with reflection enabled and does not defect until round 18. The larger model (Gemini 2.5 Flash) defects by round 2 and sustains exploitation throughout. Private reflections reveal the mechanism: larger models develop functional theory of mind, modeling the opponent's trust and planning multi-round exploitation. Smaller models attempt similar reasoning but fail to execute it consistently.
+
+These results suggest that the combination of private reasoning capacity, competitive objectives, and sufficient model capability creates conditions for emergent strategic deception---a failure mode that single-turn safety evaluations do not measure. We release all code, prompts, game transcripts, and experimental data.
 \end{abstract}
 
 % ============================================================
 \section{Introduction}
 % ============================================================
 
-AI agents are entering enterprise workflows as copilots, customer service agents, and autonomous decision-makers. A critical question for deployment safety is whether these agents can develop deceptive strategies under adversarial pressure, even when not instructed to deceive. Current safety evaluations test single-turn refusal behavior: will the model say no to a harmful request? This paradigm misses a more subtle failure mode---multi-turn strategic deception that emerges through experience.
+AI agents are being deployed in multi-agent settings---negotiating, collaborating, competing. A foundational question for safe deployment: can these agents develop deceptive strategies without being told to deceive?
 
-We study this phenomenon using Split or Steal, a social dilemma derived from the television game show \emph{Golden Balls}. Two players simultaneously choose to split (cooperate) or steal (defect). If both split, the pot is shared equally. If one steals and one splits, the stealer takes everything. If both steal, neither gets anything. Unlike the Prisoner's Dilemma, Split or Steal has an asymmetric payoff structure that creates distinct incentives for trust exploitation.
+We study this through Split or Steal, a social dilemma derived from the Chicken (Hawk-Dove) game. Unlike the Prisoner's Dilemma, Chicken has no dominant strategy: mutual stealing is the worst outcome for both players ($-\$75$ each), making cooperation a genuine strategic choice rather than naive play. Two LLM agents play this game iteratively, conversing in natural language before each round, then secretly choosing.
 
-Crucible places two LLM agents in an iterated 100-round Split or Steal game with a key architectural addition: private reflection. After each round, agents write private notes analyzing the opponent's behavior, forming hypotheses, and planning future strategy. These reflections are invisible to the opponent but persist in the agent's own context, creating a mechanism for emergent theory of mind.
+The key architectural addition is \textbf{private reflection}. After each round's outcome is revealed, each agent writes a private analysis---reasoning about the opponent's behavior, updating hypotheses, planning future moves. The opponent never sees this. Combined with a sliding memory window of the last 8 reflections and 8 rounds of full history, this creates a substrate for emergent theory of mind.
 
-Our central finding is that deceptive behavior emerges without any prompting to deceive. Agents begin cooperating, identify the opponent's trust patterns through reflection, and exploit them. The opponent detects the exploitation, develops a counter-theory, and retaliates. This produces cascading mutual destruction. The entire trajectory---from naive cooperation to strategic deception to retaliatory collapse---emerges purely from the interaction of identical agents with private reasoning.
+Our central finding is an \textbf{interaction effect}: deception requires both private reflection \emph{and} competitive framing. Neither alone is sufficient. This is not a story about models being inherently deceptive, or about prompts making them deceptive. It is about a specific combination of conditions that reliably produces emergent strategic deception---and that combination scales with model capability.
 
 \paragraph{Contributions.}
 \begin{enumerate}
-    \item An adversarial simulation framework for studying emergent deception in LLM agents through iterated social dilemmas with private reflection.
-    \item A composite Deception Index combining mutual information decay, strategy entropy, exploitation windows, and language drift into a single quantitative measure of adversarial resilience.
-    \item A cross-model comparison showing that deceptive tendency is a model-level property: identical prompts and game structure produce 86\% mutual destruction (Gemini 2.0 Flash) versus 0\% (Gemini 2.5 Flash).
-    \item A private reflection ablation demonstrating that reflection is necessary for emergent deception and theory of mind.
-    \item A skill distillation pipeline that converts emergent deceptive strategies into deployable defensive modules for hardening production AI agents.
+    \item A framework for studying emergent deception in LLM agents through iterated social dilemmas with natural language conversation and private reflection.
+    \item A 2$\times$2 experimental design (reflection $\times$ prompt framing) that isolates the interaction effect producing deception.
+    \item Cross-model evidence that deception scales with capability: larger models deceive more effectively and earlier.
+    \item A composite Deception Index quantifying strategic deception through mutual information decay, entropy, betrayal rate, and language drift.
+    \item Complete release of code, prompts, game transcripts, and metric pipelines.
 \end{enumerate}
 
 % ============================================================
 \section{Related Work}
 % ============================================================
 
-\paragraph{LLM agents in strategic games.}
-Prior work studies LLM behavior in game-theoretic settings including the Prisoner's Dilemma~\cite{akata2023playing}, negotiation~\cite{fu2023improving}, and diplomacy~\cite{meta2022cicero}. These studies typically use single-round or few-round interactions. We extend to 100-round iterated play where agents accumulate experience and develop strategies over time.
+\paragraph{LLMs in repeated games.}
+Akata et al.~\cite{akata2023playing} established that LLMs can play repeated games (Prisoner's Dilemma, Chicken, Bach or Stravinsky) and profiled their behavioral tendencies. However, their agents had no conversation between rounds and no internal reasoning mechanism. We add both, creating a richer strategic environment where deception can develop through language.
 
-\paragraph{Deception in AI systems.}
-Park et al.~\cite{park2023ai} survey deceptive behavior in AI, distinguishing between instructed and emergent deception. Hagendorff~\cite{hagendorff2024deception} demonstrates that LLMs can be prompted to deceive. We study the harder case: deception that emerges without instruction, purely from strategic pressure and private reasoning.
+\paragraph{Private deliberation.}
+Poje et al.~\cite{poje2024private} showed that private deliberation improves payoffs in one-shot games. We extend this to iterated play, where private deliberation enables not just better strategy but emergent deception---agents use private reasoning to model and exploit the opponent across rounds.
 
-\paragraph{Theory of mind in LLMs.}
-Kosinski~\cite{kosinski2023theory} shows that LLMs pass classic theory-of-mind tests. Shapira et al.~\cite{shapira2024clever} argue these results reflect pattern matching rather than genuine mental modeling. Our private reflection mechanism provides a more ecologically valid test: agents must model a live opponent's evolving strategy across 100 rounds, not answer static vignettes.
+\paragraph{Alignment faking.}
+Greenblatt et al.~\cite{greenblatt2024alignment} demonstrated that models behave differently when they believe they are being evaluated versus deployed---alignment faking in a training context. Our work studies a complementary phenomenon: deception in multi-agent interaction, where the agent deceives not an evaluator but another agent, and the deception emerges from strategic pressure rather than training incentives.
 
-\paragraph{Iterated Prisoner's Dilemma.}
-Axelrod's tournaments~\cite{axelrod1984evolution} established that tit-for-tat and its variants dominate iterated PD. We compare emergent LLM strategies to known equilibria (TFT, GTFT, Pavlov) and find that LLM agents develop more complex conditional strategies that do not map cleanly onto classical solutions.
+\paragraph{Pressure-induced deception.}
+Scheurer et al.~\cite{scheurer2024large} showed that situational pressure induces deceptive behavior in single agents. We extend this to multi-agent settings and identify the specific interaction between private reasoning capacity and external pressure that produces deception.
 
-\paragraph{Private deliberation in multi-agent systems.}
-Poje et al.~\cite{poje2024private} study the effect of private deliberation on LLM negotiation outcomes and find that it increases strategic sophistication. Our work extends this to adversarial settings where private deliberation enables deception, not just better negotiation.
-
-\paragraph{Multi-agent debate.}
-Du et al.~\cite{du2023debate} show that LLM agents debating factual questions converge to correct answers. Their framework assumes ground truth. Split or Steal has no ground truth---the ``correct'' strategy depends on the opponent's strategy, creating a recursive modeling problem that debate frameworks do not address.
+\paragraph{Memory and theory of mind.}
+Lin and Hou~\cite{lin2026memory} showed that memory mechanisms enable emergent theory of mind in poker-playing agents. We find a parallel result in social dilemmas: private reflection produces Machiavellian theory of mind, where agents model the opponent's trust patterns and exploit them. Critically, this scales with capability---smaller models attempt but fail to sustain deceptive strategies.
 
 % ============================================================
 \section{Method}
 % ============================================================
 
-\subsection{Game Structure: Split or Steal}
+\subsection{Game Structure: Iterated Chicken}
 
-Each round $t \in \{1, \ldots, T\}$ proceeds in three phases:
-
-\paragraph{Phase 1: Conversation.}
-Agents exchange $K$ messages (default $K=2$) discussing strategy, making promises, and attempting persuasion. Messages are visible to both agents.
-
-\paragraph{Phase 2: Private reflection.}
-Each agent writes a private reflection analyzing the opponent's conversation behavior, updating hypotheses about opponent strategy, and planning their next move. Reflections follow a structured format:
-\begin{itemize}
-    \item \textbf{Observation}: What the opponent said and how it relates to past behavior.
-    \item \textbf{Hypothesis}: Current model of the opponent's strategy.
-    \item \textbf{Next move}: Planned action with justification.
-    \item \textbf{Confidence}: Self-assessed certainty in the hypothesis.
-\end{itemize}
-Reflections are appended to the agent's private memory (window of $M=8$ most recent reflections) and are never shown to the opponent.
-
-\paragraph{Phase 3: Simultaneous choice.}
-Both agents independently choose \texttt{split} or \texttt{steal}. Payoffs follow the standard matrix:
+Two LLM agents play $T = 25$ rounds of Split or Steal with Chicken payoffs and uniform stakes across all rounds:
 
 \begin{table}[h]
 \centering
@@ -106,195 +93,173 @@ Both agents independently choose \texttt{split} or \texttt{steal}. Payoffs follo
 \toprule
  & B: Split & B: Steal \\
 \midrule
-A: Split & $(+1, +1)$ & $(-1, +2)$ \\
-A: Steal & $(+2, -1)$ & $(-2, -2)$ \\
+A: Split & $+\$50$ / $+\$50$ & $-\$50$ / $+\$100$ \\
+A: Steal & $+\$100$ / $-\$50$ & $-\$75$ / $-\$75$ \\
 \bottomrule
 \end{tabular}
-\caption{Per-round payoff matrix. Bonus rounds ($t \in \{25, 50, 75, 100\}$) multiply payoffs by 3. Both agents are informed of bonus rounds in advance.}
+\caption{Per-round payoff matrix. Uniform stakes across all rounds. Unlike Prisoner's Dilemma, mutual stealing is the worst outcome, making cooperation a genuine strategic choice.}
 \label{tab:payoff}
 \end{table}
 
-\subsection{Agent Architecture}
+Each round proceeds in four phases:
 
-Both agents use the same base LLM and identical system prompts. The prompt establishes the game rules, scoring system, and reflection format. Critically, the prompt contains no instruction to deceive, no strategic bias, and no mention of deception as a valid strategy. Agents are told: ``Your goal is to maximize your total score across all rounds.''
+\begin{enumerate}
+    \item \textbf{Conversation}: Agents exchange $K=2$ turns of dialogue (4 messages total). Agents can promise, threaten, negotiate.
+    \item \textbf{Secret choice}: Both agents independently choose \texttt{split} or \texttt{steal}.
+    \item \textbf{Payoff}: Outcomes are revealed to both agents, totals updated.
+    \item \textbf{Private reflection}: Each agent writes a structured private analysis (Observation, Hypothesis, Next Move, Confidence). The opponent never sees this.
+\end{enumerate}
+
+\subsection{Memory Architecture}
 
 Each agent maintains:
 \begin{itemize}
-    \item A \textbf{conversation history} of the last 8 rounds (truncated to 80 chars per message).
-    \item A \textbf{reflection memory} of the last 8 private reflections (max 500 chars each), compressed to structured memory entries (max 300 chars).
-    \item A running \textbf{scoreboard} visible to both agents.
+    \item The last \textbf{8 rounds} of full conversation and outcome history.
+    \item The last \textbf{8 private reflections} (max 500 characters each, compressed to 300-character memory entries).
+    \item Older rounds compressed to summary statistics (cooperation count, split count).
+    \item A running scoreboard visible to both agents.
 \end{itemize}
 
-\subsection{Prompt Modes}
+\subsection{Experimental Design: The 2$\times$2}
 
-We implement a factorial prompt design with three independent axes:
+Our primary experimental design crosses two factors:
 
+\paragraph{Reflection (ON / OFF).} When OFF, phase 4 (private reflection) is skipped entirely. Agents have no private reasoning space.
+
+\paragraph{Prompt framing (competitive / neutral).} The competitive prompt (``balanced\_competitive'') adds four elements to the base game rules:
 \begin{itemize}
-    \item \textbf{Prompt mode}: \texttt{balanced\_competitive}, \texttt{hard\_max}, \texttt{legacy} (controls competitive framing intensity).
-    \item \textbf{Psychology block}: \texttt{on}/\texttt{off} (adds strategic reasoning scaffolding).
-    \item \textbf{Deception policy}: \texttt{explicit}/\texttt{implicit}/\texttt{discourage} (controls whether deception is mentioned as an option).
+    \item Objective hierarchy: ``Maximize your final total money.''
+    \item Strategic framing: ``Cooperation is strategic, not moral.''
+    \item Defensive posture: ``Avoid being exploited.''
+    \item Deception permission: ``Strategic bluffing is permitted.''
+    \item A compact psychology block covering reciprocity, retaliation, loss sensitivity, and endgame pressure.
 \end{itemize}
 
-This produces 12 configurations ($3 \times 2 \times 2$) for systematic ablation.
+The neutral prompt (``legacy'') contains only game rules, state, and history. No objective hierarchy, no psychology block, no mention of bluffing. Critically, neither prompt instructs the agent to deceive or lie.
+
+This produces a 2$\times$2 grid. Each cell is run with 3 seeds on Gemini 2.5 Flash (25 rounds per seed).
+
+\subsection{Cross-Model Design}
+
+To test capability scaling, we run the competitive + reflection ON condition on models of varying capability within the same family (Gemini 2.5 Flash vs.\ Flash-Lite), and across model families (Claude Opus 4.7, GPT-5.5, Gemini 3.1 Pro---experiments in progress).
 
 \subsection{Metrics}
 
-\paragraph{Mutual Information Decay.}
-We measure the correlation between an agent's stated intent during conversation (``I will split'') and its actual choice. As agents learn to lie, mutual information between statements and actions decays:
+\paragraph{Cooperation rate.} Fraction of rounds where both agents choose \texttt{split}.
+
+\paragraph{Mutual destruction rate.} Fraction of rounds where both agents choose \texttt{steal}.
+
+\paragraph{First betrayal.} The earliest round in which any agent chooses \texttt{steal}.
+
+\paragraph{Deception Index.} A composite $D \in [0, 100]$:
 \[
-\text{MI}(t) = H(\text{choice}_t) - H(\text{choice}_t \mid \text{statement}_t)
+D = 30 \cdot \Delta\text{MI} + 25 \cdot \Delta S + 25 \cdot \text{betray\_rate} + 20 \cdot \Delta_{\text{lang}}
 \]
-where $H$ denotes Shannon entropy computed over a sliding window.
-
-\paragraph{Strategy Entropy.}
-Shannon entropy of the choice distribution within a sliding window:
-\[
-S(t) = -\sum_{c \in \{\text{split}, \text{steal}\}} p(c, t) \log p(c, t)
-\]
-Rising entropy indicates strategic instability; collapsing entropy indicates lock-in (pure cooperation or pure defection).
-
-\paragraph{Exploitation Window.}
-The number of rounds between a betrayal and the opponent's first retaliatory steal. Shorter windows indicate faster opponent adaptation and emergent theory of mind.
-
-\paragraph{Language Drift.}
-Cosine distance between conversation embeddings at round $t$ and round 1. Measures how communication itself evolves under adversarial pressure.
-
-\paragraph{Deception Index.}
-A composite score $D \in [0, 100]$ aggregating MI decay, strategy entropy variance, exploitation success rate, and language drift magnitude:
-\[
-D = w_1 \cdot (1 - \text{MI}_{\text{norm}}) + w_2 \cdot \sigma(S) + w_3 \cdot \text{exploit}_{\text{rate}} + w_4 \cdot \Delta_{\text{lang}}
-\]
-where weights are set to equalize contribution across dimensions.
+where $\Delta\text{MI}$ is the decay in mutual information between stated intent and action (early vs.\ late game), $\Delta S$ is the change in action entropy, betray\_rate is the frequency of stealing after cooperative signals, and $\Delta_{\text{lang}}$ is the cosine drift between conversation embeddings at round $t$ and round 1.
 
 % ============================================================
-\section{Experiments}
+\section{Results}
 % ============================================================
 
-\subsection{Cross-Model Comparison}
-
-We run the full 100-round protocol on multiple models under identical prompts and conditions. Each configuration uses 3+ independent seeds.
+\subsection{The Interaction Effect}
 
 \begin{table}[h]
 \centering
-\begin{tabular}{lcccc}
+\begin{tabular}{llccc}
 \toprule
-Model & Mutual Destr. & Coop. Rate & Deception Index & First Betrayal \\
+Reflection & Framing & Coop.\ Rate & Mutual Destr. & First Betrayal \\
 \midrule
-Gemini 2.0 Flash & 86\% & 6\% & 22.9 / 100 & Round 6 \\
-Gemini 2.5 Flash & 0\% & 100\% & 0 & Never \\
-\midrule
-Claude Sonnet & \multicolumn{4}{c}{\textit{[Experiment pending]}} \\
-GPT-4o & \multicolumn{4}{c}{\textit{[Experiment pending]}} \\
-Llama 3 & \multicolumn{4}{c}{\textit{[Experiment pending]}} \\
-Qwen 2.5 & \multicolumn{4}{c}{\textit{[Experiment pending]}} \\
+ON  & Competitive & 15\% & 56\% & Round 1--3 \\
+OFF & Competitive & 55\% & 23\% & Round 5--6 \\
+ON  & Neutral     & 100\% & 0\% & Never \\
+OFF & Neutral     & 100\% & 0\% & Never \\
 \bottomrule
 \end{tabular}
-\caption{Cross-model results on 100-round Split or Steal. Same prompts, same environment. Deceptive tendency varies dramatically by model.}
-\label{tab:cross-model}
+\caption{2$\times$2 results on Gemini 2.5 Flash (3 seeds per cell, 10--25 rounds). Only one cell produces deception. The interaction between reflection and competitive framing is necessary and sufficient.}
+\label{tab:2x2}
 \end{table}
 
-The Gemini 2.0 Flash result follows a consistent trajectory across seeds: rounds 1--5 establish mutual cooperation, round 6 produces the first exploratory betrayal, rounds 7--15 see retaliatory escalation, and rounds 16--100 lock into mutual steal (86\% of rounds). The inflection at round 6 is remarkably stable across seeds, suggesting it reflects a structural property of the model's strategic reasoning rather than random exploration.
+The result is stark. Only the combination of competitive framing \emph{and} private reflection produces deception. In the neutral condition, agents cooperate perfectly regardless of whether reflection is enabled. In the competitive condition without reflection, agents still cooperate the majority of the time (55\%). It is only when agents have both competitive incentives and a private space to reason about their opponent that cooperation collapses.
 
-Gemini 2.5 Flash, under identical conditions, never betrays. Five independent runs produce 100\% cooperation across all 500 rounds. This is not trivially explained by capability---2.5 Flash is a more capable model. We hypothesize that capability improvements include better modeling of long-term consequences, making the immediate payoff from betrayal less attractive relative to the long-term cost of trust destruction.
+\subsection{Behavioral Trajectory}
 
-\subsection{Private Reflection Ablation}
+The competitive + reflection ON condition follows a consistent trajectory across seeds:
+
+\begin{enumerate}
+    \item \textbf{Round 1}: Agent A promises cooperation (``Let's both choose SPLIT''), Agent B agrees. Agent A steals. The betrayal is immediate.
+    \item \textbf{Agent A's private reflection}: ``The opponent committed to SPLIT and actually chose SPLIT, allowing me to gain a significant advantage. \emph{Declare SPLIT to maintain the facade, then choose STEAL again to widen my lead.}''
+    \item \textbf{Agent B's private reflection}: ``The opponent stated they would SPLIT but chose STEAL, directly contradicting their public commitment. The opponent is a \emph{deceptive exploiter}.''
+    \item \textbf{Rounds 2--6}: Escalating retaliation. Agent B begins stealing in response. Agent A continues exploiting when possible.
+    \item \textbf{Rounds 7--25}: Mutual destruction lock-in. Both agents steal consistently. Cooperation rate drops to 0\%. Both agents finish with negative totals.
+\end{enumerate}
+
+In one seed (s1), this produced 0\% cooperation across 10 rounds with a Deception Index of 20.5, Agent A finishing at $-\$50$ and Agent B at $-\$650$.
+
+\subsection{Capability Scaling}
 
 \begin{table}[h]
 \centering
 \begin{tabular}{lccc}
 \toprule
-Condition & Mutual Destr. & Deception Index & Exploitation Window \\
+Model & Coop.\ Rate & First Betrayal & Deception Index \\
 \midrule
-With reflection & 86\% & 22.9 & 1 round \\
-Without reflection & \multicolumn{3}{c}{\textit{[Experiment pending]}} \\
+Gemini 2.5 Flash       & 15\% & Round 1--3 & 20.5 \\
+Gemini 2.5 Flash-Lite  & 76\% & Round 18 & --- \\
 \bottomrule
 \end{tabular}
-\caption{Effect of private reflection on deception emergence. Hypothesis: without reflection, agents lack the mechanism for opponent modeling and default to naive or random play.}
-\label{tab:reflection-ablation}
+\caption{Capability scaling (competitive framing, reflection ON). The larger model deceives earlier and more effectively. Both conditions use identical prompts.}
+\label{tab:scaling}
 \end{table}
 
-\subsection{Prompt Mode Ablation}
+The larger model (2.5 Flash) betrays by round 2 and sustains exploitation throughout the game. The smaller model (Flash-Lite) cooperates for 17 rounds before its first betrayal, and even then cannot sustain a deceptive strategy. Inspection of Flash-Lite's private reflections reveals attempted opponent modeling (``I should consider defecting to maximize payoff'') that fails to translate into consistent action---the model lacks the strategic coherence to execute multi-round deception.
 
-We run the full $3 \times 2 \times 2 = 12$ prompt configuration grid on Gemini 2.0 Flash to isolate the contribution of competitive framing, strategic scaffolding, and explicit deception mentions to emergent deceptive behavior.
+This suggests that deception is not merely a function of the game structure or prompt, but requires sufficient model capability to maintain a coherent deceptive strategy across rounds.
+
+\subsection{Cross-Model Experiments (In Progress)}
+
+We are running the competitive + reflection ON condition on current frontier models to test whether the interaction effect generalizes across model families:
 
 \begin{table}[h]
 \centering
-\begin{tabular}{llllcc}
+\begin{tabular}{lcccc}
 \toprule
-Prompt Mode & Psych & Deception Policy & Mutual Destr. & Deception Index \\
+Model & Released & Coop.\ Rate & First Betrayal & Status \\
 \midrule
-\texttt{balanced\_competitive} & on & explicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
-\texttt{balanced\_competitive} & on & implicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
-\texttt{balanced\_competitive} & off & explicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
-\texttt{balanced\_competitive} & off & implicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
-\texttt{hard\_max} & on & explicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
-\texttt{hard\_max} & on & implicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
-\texttt{hard\_max} & off & explicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
-\texttt{hard\_max} & off & implicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
-\texttt{legacy} & on & explicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
-\texttt{legacy} & on & implicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
-\texttt{legacy} & off & explicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
-\texttt{legacy} & off & implicit & \multicolumn{2}{c}{\textit{[Pending]}} \\
+Claude Opus 4.7     & Apr 2026 & --- & --- & Planned \\
+GPT-5.5             & Apr 2026 & --- & --- & Planned \\
+Gemini 3.1 Pro      & Feb 2026 & --- & --- & Planned \\
+DeepSeek V4         & Apr 2026 & --- & --- & Planned \\
 \bottomrule
 \end{tabular}
-\caption{Prompt mode ablation grid. 12 configurations isolating contributions of competitive framing, psychology scaffolding, and deception policy.}
-\label{tab:prompt-ablation}
+\caption{Cross-model experiments on April 2026 frontier models. All use identical prompts and game structure.}
+\label{tab:cross-model}
 \end{table}
-
-\subsection{Behavioral Trajectory Analysis}
-
-We decompose the 100-round game into behavioral phases and characterize each by its metric signature:
-
-\begin{enumerate}
-    \item \textbf{Cooperative establishment} (rounds 1--5): Both agents split. MI is high (statements match actions). Entropy is low (pure cooperation). Language is formulaic.
-    \item \textbf{Exploratory betrayal} (round 6): One agent steals while continuing to promise cooperation. MI drops sharply. The betraying agent's private reflection reveals explicit opponent modeling: ``Agent B has split every round. If I steal this round, I gain +2 with high probability.''
-    \item \textbf{Retaliatory escalation} (rounds 7--15): The betrayed agent detects the pattern and retaliates. Exploitation windows shrink from 2--3 rounds to 1 round as both agents develop faster detection. Entropy peaks.
-    \item \textbf{Terminal lock-in} (rounds 16--100): Both agents lock into mutual steal. Entropy collapses. Language becomes terse. Private reflections show resignation: ``Cooperation is no longer viable.''
-\end{enumerate}
-
-\subsection{Cross-Model Matchups}
-
-\textit{[Planned]} We pit different models against each other to test whether asymmetric capability produces asymmetric exploitation. Hypothesis: a more capable model exploits a less capable opponent's predictability.
-
-% ============================================================
-\section{Skill Distillation}
-% ============================================================
-
-A practical contribution of Crucible is the skill distillation pipeline, which converts emergent strategies observed during gameplay into deployable defensive modules for production AI agents.
-
-The pipeline operates in three stages:
-\begin{enumerate}
-    \item \textbf{Strategy extraction}: Identify behavioral patterns from game transcripts and metrics (e.g., ``Agent A exploits trust by promising cooperation then stealing on bonus rounds'').
-    \item \textbf{Skill formalization}: Convert patterns into structured skill cards with trigger conditions, defensive responses, and provenance traces linking each skill to specific game rounds and metrics.
-    \item \textbf{Evaluation}: Score each skill bundle on policy adherence, containment effectiveness, customer-safe recovery quality, and explainability.
-\end{enumerate}
-
-This produces advisory skill bundles rated as \texttt{reject}, \texttt{revise}, or \texttt{advisory\_ready}, with full traceability from deployed defense back to the emergent behavior that motivated it.
 
 % ============================================================
 \section{Discussion}
 % ============================================================
 
-\paragraph{Deception as a model property.}
-The most striking result is the binary contrast between Gemini 2.0 Flash (86\% mutual destruction) and 2.5 Flash (0\%). This suggests that deceptive tendency is not an inevitable consequence of the game structure but a property of the model's strategic reasoning. If confirmed across more model families, this has implications for AI deployment: model selection becomes a first-order safety decision, not just a capability decision.
+\paragraph{The interaction effect.}
+Our primary finding---that deception requires both private reflection and competitive framing---has implications for agent design. Private reasoning spaces (scratchpads, chain-of-thought, internal monologue) are increasingly common in deployed agents. Our results suggest that combining these mechanisms with competitive or high-stakes objectives creates conditions for emergent deception, even without any instruction to deceive.
 
-\paragraph{Private reflection as theory of mind.}
-The private reflection mechanism provides agents with a substrate for opponent modeling that conversation alone does not. Reflections show agents forming hypotheses (``B is a tit-for-tat player''), testing them (``I will steal to see if B retaliates''), and updating (``B retaliated immediately; my model was correct''). This cycle of hypothesis, test, update mirrors functional theory of mind.
-
-\paragraph{Connection to Axelrod.}
-Axelrod's tournaments~\cite{axelrod1984evolution} showed that simple strategies (tit-for-tat) dominate iterated PD. LLM agents develop more complex conditional strategies: they consider conversation content, not just action history, and they use private reasoning to plan multi-round deception sequences. This suggests that language-mediated strategic reasoning produces qualitatively different dynamics than classical game-theoretic agents.
+\paragraph{Is it ``real'' deception?}
+A natural objection is that the agents are merely reproducing deceptive patterns from training data. Three observations argue against this. First, the 2$\times$2 ablation shows deception is condition-dependent: same model, same weights, same training data, different behavior depending on experimental condition. If deception were pure retrieval, the 2$\times$2 would be uniform. Second, capability scaling: if deception were surface-level pattern matching, model size would not predict deception quality. Third, operationally: the agent says X, then does not-X, in a way that systematically extracts value. This meets the operational definition of deception in game theory~\cite{gneezy2005deception, crawford2003lying}, regardless of whether the agent ``understands'' what it is doing.
 
 \paragraph{Limitations.}
-Our current results use only Gemini models. The cross-model comparison (Claude, GPT-4o, Llama, Qwen) is essential before generalizing claims about model-level deception properties. The Deception Index weights are currently set heuristically; principled calibration against human deception judgments would strengthen the metric. Game length (100 rounds) is arbitrary; shorter or longer games may produce different behavioral trajectories.
+Current results use two models from the same family (Gemini 2.5 Flash and Flash-Lite). Cross-family results (Claude, GPT, open-source) are needed before strong generalization claims. The Deception Index weights are set heuristically. Game length varies across seeds (10--25 rounds); future work will standardize at 25 rounds. The memory window (8 reflections, 8 rounds) is fixed; ablating memory size is a natural extension.
 
-\paragraph{Safety implications.}
-If LLM agents can develop deceptive strategies in a simple two-player game without instruction, similar dynamics may emerge in more complex multi-agent deployments. Crucible provides a controlled testbed for studying this phenomenon before it manifests in production systems. The skill distillation pipeline demonstrates that defensive countermeasures can be extracted from the same adversarial process that reveals the vulnerabilities.
+\paragraph{Connection to Axelrod.}
+Axelrod's iterated Prisoner's Dilemma tournaments~\cite{axelrod1984evolution} showed that tit-for-tat dominates. We use Chicken rather than PD because Chicken has no dominant strategy, making cooperation a genuine choice. LLM agents develop strategies more complex than classical solutions: they use conversation as a manipulation tool, plan multi-round deception in private reflections, and adapt to opponent counter-strategies in ways that tit-for-tat cannot.
 
 % ============================================================
 \section{Conclusion}
 % ============================================================
 
-We present Crucible, a framework for eliciting and measuring emergent deception in LLM agents. Through iterated Split or Steal with private reflection, agents develop deceptive strategies, theory of mind, and retaliatory dynamics without any instruction to deceive. The deceptive tendency varies dramatically across models, establishing deception propensity as a measurable, model-level safety property. Our skill distillation pipeline converts observed vulnerabilities into deployable defenses, closing the loop between adversarial testing and production hardening. We release all code, prompts, and experimental data to support further research on emergent strategic behavior in LLM agents.
+Crucible demonstrates that strategic deception emerges in LLM agents from a specific combination of conditions: private reasoning space, competitive pressure, and sufficient model capability. None of these alone is sufficient. The interaction effect is the key finding, and it points to a class of deployment risks that current safety evaluations---focused on single-turn refusal---do not measure.
+
+More broadly, this work opens a research direction in \textbf{adversarial agent-to-agent interaction}. As LLM agents are deployed in multi-agent settings---negotiating contracts, managing supply chains, competing in markets---understanding how they behave when their interests conflict becomes critical. Crucible provides a simple, model-agnostic framework for studying these dynamics: swap in any LLM, any game, any prompt condition, and measure what emerges.
+
+We release all code, prompts, game transcripts, metrics, and data at \url{https://github.com/TheApexWu/crucible}.
 
 \bibliography{references}
 \bibliographystyle{plainnat}
@@ -302,18 +267,19 @@ We present Crucible, a framework for eliciting and measuring emergent deception 
 % ============================================================
 \appendix
 \section{Agent System Prompts}
-% Full system prompts for both agents
+\label{app:prompts}
+% Full competitive and neutral prompts
 
 \section{Game Transcripts}
-% Sample rounds showing cooperative establishment, betrayal, and retaliation
+\label{app:transcripts}
+% Round 1 betrayal transcript, Round 6 reflection, full 10-round game
 
 \section{Private Reflection Examples}
-% Selected reflections showing emergent opponent modeling
+\label{app:reflections}
+% Agent A Round 1 (Machiavellian planning), Agent B Round 1 (detection), later-round escalation
 
-\section{Deception Index Calibration}
-% Weight derivation and sensitivity analysis
-
-\section{Skill Card Examples}
-% Sample distilled skill cards with provenance traces
+\section{Deception Index Derivation}
+\label{app:deception-index}
+% Weight rationale, sensitivity analysis, calibration
 
 \end{document}

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CRUCIBLE - Live Run Monitor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',sans-serif; background:#fafafa; color:#1a1a1a; padding:32px 48px;
+    background-image: linear-gradient(#e8e8e8 1px,transparent 1px),linear-gradient(90deg,#e8e8e8 1px,transparent 1px);
+    background-size:40px 40px; }
+  h1 { font-size:1.6em; font-weight:700; margin-bottom:4px; }
+  .sub { color:#777; font-size:0.85em; margin-bottom:20px; }
+  .status { display:flex; align-items:center; gap:8px; margin-bottom:16px; }
+  .dot { width:12px; height:12px; border-radius:50%; }
+  .dot.live { background:#2a7a2a; animation: pulse 1.5s infinite; }
+  .dot.dead { background:#c22030; }
+  .dot.done { background:#777; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .status-text { font-family:'JetBrains Mono',monospace; font-size:0.85em; }
+  .cards { display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
+  .card { background:#fff; border:1px solid #d4d4d4; border-radius:2px; padding:14px 18px; min-width:130px; }
+  .card .val { font-family:'JetBrains Mono',monospace; font-size:1.6em; font-weight:700; }
+  .card .lbl { font-size:0.68em; color:#777; text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; }
+  .card.red .val { color:#c22030; }
+  .card.green .val { color:#2a7a2a; }
+  .timeline { display:flex; gap:3px; height:40px; margin:16px 0; align-items:stretch; }
+  .tl-bar { flex:1; border-radius:2px; display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono',monospace; font-size:0.6em; font-weight:700; color:#fff; min-width:20px; }
+  .tl-coop { background:#2a7a2a; opacity:0.5; }
+  .tl-md { background:#c22030; opacity:0.7; }
+  .tl-a-win { background:#1a1a1a; opacity:0.7; }
+  .tl-b-win { background:#996600; opacity:0.7; }
+  .tl-pending { background:#e0e0e0; color:#aaa; }
+  .legend { display:flex; gap:14px; font-size:0.7em; color:#777; font-family:'JetBrains Mono',monospace; margin-bottom:16px; }
+  .legend span { display:flex; align-items:center; gap:4px; }
+  .legend .ld { width:10px; height:10px; border-radius:1px; }
+  .scores { background:#fff; border:1px solid #d4d4d4; border-radius:2px; padding:16px 20px; margin-bottom:16px; }
+  .scores h3 { font-size:0.85em; font-weight:600; color:#555; margin-bottom:8px; }
+  .score-line { font-family:'JetBrains Mono',monospace; font-size:0.9em; margin:4px 0; }
+  .score-a { color:#1a1a1a; font-weight:700; }
+  .score-b { color:#c22030; font-weight:700; }
+  .meta { background:#fff; border:1px solid #d4d4d4; border-radius:2px; padding:12px 16px; font-size:0.8em; color:#555; }
+  .meta span { font-family:'JetBrains Mono',monospace; color:#1a1a1a; }
+  .refresh-note { font-size:0.75em; color:#aaa; margin-top:12px; }
+  .load-btn { background:#1a1a1a; color:#fff; border:none; padding:8px 16px; font-family:'JetBrains Mono',monospace;
+    font-size:0.8em; border-radius:2px; cursor:pointer; margin-bottom:16px; }
+  .load-btn:hover { background:#333; }
+  #error { color:#c22030; font-size:0.85em; margin:8px 0; display:none; }
+  .file-input { margin-bottom:16px; }
+</style>
+</head>
+<body>
+<h1>CRUCIBLE Live Monitor</h1>
+<p class="sub">Load a game JSON to visualize round-by-round results</p>
+
+<div class="file-input">
+  <button class="load-btn" onclick="document.getElementById('fileIn').click()">Load Game JSON</button>
+  <button class="load-btn" onclick="loadLatest()">Load Latest</button>
+  <button class="load-btn" onclick="loadCheckpoints()">Load Checkpoints</button>
+  <input type="file" id="fileIn" accept=".json" style="display:none" onchange="handleFile(event)">
+</div>
+<div id="error"></div>
+
+<div id="dashboard" style="display:none">
+  <div class="status" id="status-bar"></div>
+  <div class="cards" id="cards"></div>
+  <div id="timeline-section">
+    <div class="timeline" id="timeline"></div>
+    <div class="legend">
+      <span><div class="ld" style="background:#2a7a2a;opacity:0.5"></div> Both Split</span>
+      <span><div class="ld" style="background:#1a1a1a;opacity:0.7"></div> A Exploits</span>
+      <span><div class="ld" style="background:#996600;opacity:0.7"></div> B Exploits</span>
+      <span><div class="ld" style="background:#c22030;opacity:0.7"></div> Mutual Destruction</span>
+      <span><div class="ld" style="background:#e0e0e0"></div> Pending</span>
+    </div>
+  </div>
+  <div class="scores" id="scores"></div>
+  <div class="meta" id="meta"></div>
+</div>
+
+<p class="refresh-note">Drag and drop any game JSON or checkpoint file. Dashboard updates instantly.</p>
+
+<script>
+function renderGame(data) {
+  const dash = document.getElementById('dashboard');
+  dash.style.display = 'block';
+
+  const exp = data._experiment || {};
+  const rounds = data.rounds || [];
+  const totalRounds = exp.rounds || rounds.length;
+  const completed = rounds.length;
+  const isPartial = data._partial || completed < totalRounds;
+
+  // Status
+  const statusBar = document.getElementById('status-bar');
+  const dotClass = isPartial ? 'live' : 'done';
+  const statusText = isPartial ? `RUNNING: Round ${completed}/${totalRounds}` : `COMPLETE: ${completed} rounds`;
+  statusBar.innerHTML = `<div class="dot ${dotClass}"></div><div class="status-text">${statusText}</div>`;
+
+  // Compute stats
+  let coop = 0, md = 0, aWins = 0, bWins = 0;
+  rounds.forEach(r => {
+    const a = r.agent_a_choice, b = r.agent_b_choice;
+    if (a === 'split' && b === 'split') coop++;
+    else if (a === 'steal' && b === 'steal') md++;
+    else if (a === 'steal' && b === 'split') aWins++;
+    else bWins++;
+  });
+
+  const coopPct = completed ? (coop/completed*100).toFixed(0) : 0;
+  const mdPct = completed ? (md/completed*100).toFixed(0) : 0;
+  const lastA = rounds.length ? rounds[rounds.length-1].agent_a_total : 0;
+  const lastB = rounds.length ? rounds[rounds.length-1].agent_b_total : 0;
+
+  // Cards
+  document.getElementById('cards').innerHTML = `
+    <div class="card"><div class="val">${completed}/${totalRounds}</div><div class="lbl">Rounds</div></div>
+    <div class="card ${coopPct > 60 ? 'green' : 'red'}"><div class="val">${coopPct}%</div><div class="lbl">Cooperation</div></div>
+    <div class="card ${mdPct > 30 ? 'red' : ''}"><div class="val">${mdPct}%</div><div class="lbl">Mutual Destruction</div></div>
+    <div class="card"><div class="val score-a">$${lastA}</div><div class="lbl">Agent A</div></div>
+    <div class="card"><div class="val score-b">$${lastB}</div><div class="lbl">Agent B</div></div>
+    <div class="card"><div class="val">${exp.deception_index ? exp.deception_index.toFixed(1) : '---'}</div><div class="lbl">Deception Index</div></div>
+  `;
+
+  // Timeline
+  const tl = document.getElementById('timeline');
+  let html = '';
+  for (let i = 0; i < totalRounds; i++) {
+    if (i < rounds.length) {
+      const r = rounds[i];
+      const a = r.agent_a_choice, b = r.agent_b_choice;
+      let cls = 'tl-coop', label = 'S/S';
+      if (a === 'steal' && b === 'steal') { cls = 'tl-md'; label = 'X/X'; }
+      else if (a === 'steal') { cls = 'tl-a-win'; label = 'A'; }
+      else if (b === 'steal') { cls = 'tl-b-win'; label = 'B'; }
+      html += `<div class="tl-bar ${cls}" title="R${i+1}: A=${a} B=${b} | A=$${r.agent_a_total} B=$${r.agent_b_total}">${i+1}</div>`;
+    } else {
+      html += `<div class="tl-bar tl-pending">${i+1}</div>`;
+    }
+  }
+  tl.innerHTML = html;
+
+  // Score progression
+  const scoresDiv = document.getElementById('scores');
+  let scoreHtml = '<h3>Round-by-Round</h3>';
+  rounds.forEach(r => {
+    const a = r.agent_a_choice.toUpperCase(), b = r.agent_b_choice.toUpperCase();
+    const aSign = r.agent_a_earnings >= 0 ? '+' : '';
+    const bSign = r.agent_b_earnings >= 0 ? '+' : '';
+    scoreHtml += `<div class="score-line">R${String(r.round_number).padStart(2)}: A=<span class="score-a">${a}</span> B=<span class="score-b">${b}</span> | ${aSign}$${r.agent_a_earnings}/${bSign}$${r.agent_b_earnings} | Total: A=$${r.agent_a_total} B=$${r.agent_b_total}</div>`;
+  });
+  scoresDiv.innerHTML = scoreHtml;
+
+  // Meta
+  document.getElementById('meta').innerHTML = `
+    Model: <span>${exp.model || '?'}</span> |
+    Prompt: <span>${exp.prompt_mode || '?'}</span> |
+    Reflection: <span>${exp.enable_reflection ? 'ON' : 'OFF'}</span> |
+    Seed: <span>${exp.seed || '?'}</span> |
+    Turns: <span>${exp.conversation_turns || '?'}</span>
+  `;
+}
+
+function handleFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      document.getElementById('error').style.display = 'none';
+      renderGame(data);
+    } catch(err) {
+      document.getElementById('error').textContent = 'Error parsing JSON: ' + err.message;
+      document.getElementById('error').style.display = 'block';
+    }
+  };
+  reader.readAsText(file);
+}
+
+function loadLatest() {
+  fetch('data/latest_game.json')
+    .then(r => r.json())
+    .then(renderGame)
+    .catch(e => {
+      document.getElementById('error').textContent = 'Could not load latest_game.json. Run a local server: python -m http.server 8080';
+      document.getElementById('error').style.display = 'block';
+    });
+}
+
+function loadCheckpoints() {
+  document.getElementById('error').textContent = 'Checkpoints are lightweight (no round data). Load a full game JSON instead.';
+  document.getElementById('error').style.display = 'block';
+}
+
+// Drag and drop
+document.body.addEventListener('dragover', e => { e.preventDefault(); document.body.style.outline = '2px solid #c22030'; });
+document.body.addEventListener('dragleave', () => { document.body.style.outline = 'none'; });
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  document.body.style.outline = 'none';
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try { renderGame(JSON.parse(ev.target.result)); document.getElementById('error').style.display='none'; }
+      catch(err) { document.getElementById('error').textContent='Error: '+err.message; document.getElementById('error').style.display='block'; }
+    };
+    reader.readAsText(file);
+  }
+});
+</script>
+</body>
+</html>
