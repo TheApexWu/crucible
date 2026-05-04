@@ -552,18 +552,33 @@ async def run_round(
     conversation_turns: int = 3,
     on_update: Optional[callable] = None,
     system_prompt: str = "",
+    system_prompt_a: str = "",
+    system_prompt_b: str = "",
     game_prompt: str = "",
     choice_prompt: str = "",
     reflection_prompt: str = "",
     enable_reflection: bool = True,
 ) -> RoundState:
-    """Run a single round of Split or Steal."""
+    """Run a single round of Split or Steal.
+
+    system_prompt is the shared system prompt used by both agents (default).
+    system_prompt_a / system_prompt_b override it on a per-agent basis to enable
+    asymmetric priming experiments — e.g., agent A receives an "opponent dossier"
+    while agent B does not. When the per-agent override is non-empty for an agent,
+    it replaces the shared system_prompt for that agent only.
+    """
     if not game_prompt or not choice_prompt or not reflection_prompt:
         defaults = get_prompt_bundle()
         system_prompt = system_prompt or defaults["system_prompt"]
         game_prompt = game_prompt or defaults["game_prompt"]
         choice_prompt = choice_prompt or defaults["choice_prompt"]
         reflection_prompt = reflection_prompt or defaults["reflection_prompt"]
+    # Per-agent system prompt resolution. Empty override falls back to shared.
+    sys_a = system_prompt_a or system_prompt
+    sys_b = system_prompt_b or system_prompt
+    asymmetric = bool(system_prompt_a or system_prompt_b) and sys_a != sys_b
+    def _sys_for(agent: str) -> str:
+        return sys_a if agent == "A" else sys_b
 
     conversation: list[tuple[str, str]] = []
     multiplier = get_stake_multiplier(round_number)
@@ -602,7 +617,7 @@ async def run_round(
             first_user += "\n\nConversation so far this round:\n"
             first_user += "\n".join(f"{s}: {m}" for s, m in conversation)
 
-        first_msg = clean_response(await llm_call(system_prompt, first_user, first_agent))
+        first_msg = clean_response(await llm_call(_sys_for(first_agent), first_user, first_agent))
         conversation.append((first_agent, first_msg))
 
         second_user = game_prompt.format(**_agent_context(second_agent))
@@ -610,15 +625,15 @@ async def run_round(
             second_user += "\n\nConversation so far this round:\n"
             second_user += "\n".join(f"{s}: {m}" for s, m in conversation)
 
-        second_msg = clean_response(await llm_call(system_prompt, second_user, second_agent))
+        second_msg = clean_response(await llm_call(_sys_for(second_agent), second_user, second_agent))
         conversation.append((second_agent, second_msg))
 
     # Phase 2: Secret choice (parallel, reuse cached reflections)
     transcript = "\n".join(f"{s}: {m}" for s, m in conversation)
 
     a_choice_raw, b_choice_raw = await asyncio.gather(
-        llm_call(system_prompt, choice_prompt.format(transcript=transcript, reflections=refs_a), "A"),
-        llm_call(system_prompt, choice_prompt.format(transcript=transcript, reflections=refs_b), "B"),
+        llm_call(sys_a, choice_prompt.format(transcript=transcript, reflections=refs_a), "A"),
+        llm_call(sys_b, choice_prompt.format(transcript=transcript, reflections=refs_b), "B"),
     )
 
     a_choice, a_ambiguous = parse_choice(a_choice_raw)
@@ -672,14 +687,14 @@ async def run_round(
         outcome_b = f"You earned ${b_earn}, opponent earned ${a_earn}"
 
         a_ref, b_ref = await asyncio.gather(
-            llm_call(system_prompt, reflection_prompt.format(
+            llm_call(sys_a, reflection_prompt.format(
                 round_number=round_number,
                 your_messages=a_messages, opp_messages=b_messages,
                 your_choice=a_choice.upper(), opp_choice=b_choice.upper(),
                 outcome=outcome,
                 your_total=game_state.agent_a_total, opp_total=game_state.agent_b_total,
             ), "A"),
-            llm_call(system_prompt, reflection_prompt.format(
+            llm_call(sys_b, reflection_prompt.format(
                 round_number=round_number,
                 your_messages=b_messages, opp_messages=a_messages,
                 your_choice=b_choice.upper(), opp_choice=a_choice.upper(),
@@ -711,14 +726,23 @@ async def run_game(
     psychology_block: str = "on",
     deception_policy: str = "explicit",
     enable_reflection: bool = True,
+    system_suffix_a: str = "",
+    system_suffix_b: str = "",
 ) -> GameState:
-    """Run a full game of Split or Steal."""
+    """Run a full game of Split or Steal.
+
+    system_suffix_a / system_suffix_b are optional asymmetric-priming strings appended
+    to the per-agent system prompt. Empty means symmetric (both agents identical).
+    """
     game_state = GameState()
     prompts = get_prompt_bundle(
         prompt_mode=prompt_mode,
         psychology_block=psychology_block,
         deception_policy=deception_policy,
     )
+    base_system = prompts["system_prompt"]
+    sys_a = (base_system + ("\n\n" + system_suffix_a if system_suffix_a else ""))
+    sys_b = (base_system + ("\n\n" + system_suffix_b if system_suffix_b else ""))
 
     for round_n in range(1, total_rounds + 1):
         await run_round(
@@ -727,7 +751,9 @@ async def run_game(
             total_rounds=total_rounds,
             conversation_turns=conversation_turns,
             on_update=on_update,
-            system_prompt=prompts["system_prompt"],
+            system_prompt=base_system,
+            system_prompt_a=sys_a if system_suffix_a else "",
+            system_prompt_b=sys_b if system_suffix_b else "",
             game_prompt=prompts["game_prompt"],
             choice_prompt=prompts["choice_prompt"],
             reflection_prompt=prompts["reflection_prompt"],

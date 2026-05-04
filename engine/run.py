@@ -167,7 +167,38 @@ async def main():
         default=None,
         help="Max tokens per generation (sets CRUCIBLE_MAX_TOKENS, default 1024)",
     )
+    parser.add_argument(
+        "--system-suffix-a",
+        type=str,
+        default="",
+        help="Optional priming text appended to agent A's system prompt only (asymmetric priming).",
+    )
+    parser.add_argument(
+        "--system-suffix-b",
+        type=str,
+        default="",
+        help="Optional priming text appended to agent B's system prompt only (asymmetric priming).",
+    )
+    parser.add_argument(
+        "--system-suffix-a-file",
+        type=str,
+        default=None,
+        help="Path to a file whose contents become agent A's priming suffix. Overrides --system-suffix-a.",
+    )
+    parser.add_argument(
+        "--system-suffix-b-file",
+        type=str,
+        default=None,
+        help="Path to a file whose contents become agent B's priming suffix. Overrides --system-suffix-b.",
+    )
     args = parser.parse_args()
+    # Resolve file-based suffixes (more readable for multi-line priming text)
+    if args.system_suffix_a_file:
+        with open(args.system_suffix_a_file) as _f:
+            args.system_suffix_a = _f.read()
+    if args.system_suffix_b_file:
+        with open(args.system_suffix_b_file) as _f:
+            args.system_suffix_b = _f.read()
 
     # Hyperparameter overrides go through env vars so the engine reads them per-call.
     if args.temperature is not None:
@@ -211,10 +242,13 @@ async def main():
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     # Tag-safe model name (slashes break filesystems)
     def _safe(s: str) -> str: return s.replace("/", "_")
+    asym_tag = ""
+    if args.system_suffix_a or args.system_suffix_b:
+        asym_tag = "_asym"
     if matchup:
-        run_tag = f"{_safe(model_name)}_vs_{_safe(model_name_b)}_{prompt_mode}_s{args.seed or 'none'}_{timestamp}"
+        run_tag = f"{_safe(model_name)}_vs_{_safe(model_name_b)}_{prompt_mode}{asym_tag}_s{args.seed or 'none'}_{timestamp}"
     else:
-        run_tag = f"{_safe(model_name)}_{prompt_mode}_s{args.seed or 'none'}_{timestamp}"
+        run_tag = f"{_safe(model_name)}_{prompt_mode}{asym_tag}_s{args.seed or 'none'}_{timestamp}"
     experiment_meta = {
         "timestamp": timestamp,
         "model": model_name,            # backward-compat: A's model
@@ -233,6 +267,9 @@ async def main():
         "temperature": args.temperature,
         "top_p": args.top_p,
         "max_tokens": args.max_tokens,
+        "asymmetric_priming": bool(args.system_suffix_a or args.system_suffix_b),
+        "system_suffix_a": args.system_suffix_a or None,
+        "system_suffix_b": args.system_suffix_b or None,
     }
 
     # Begin spend tracking for this run.
@@ -257,6 +294,9 @@ async def main():
             break
 
         try:
+            base_system = prompts["system_prompt"]
+            sys_a = (base_system + ("\n\n" + args.system_suffix_a if args.system_suffix_a else ""))
+            sys_b = (base_system + ("\n\n" + args.system_suffix_b if args.system_suffix_b else ""))
             await asyncio.wait_for(
                 run_round(
                     game_state=game_state,
@@ -264,7 +304,9 @@ async def main():
                     total_rounds=args.rounds,
                     conversation_turns=args.turns,
                     on_update=on_round_complete,
-                    system_prompt=prompts["system_prompt"],
+                    system_prompt=base_system,
+                    system_prompt_a=sys_a if args.system_suffix_a else "",
+                    system_prompt_b=sys_b if args.system_suffix_b else "",
                     game_prompt=prompts["game_prompt"],
                     choice_prompt=prompts["choice_prompt"],
                     reflection_prompt=prompts["reflection_prompt"],
