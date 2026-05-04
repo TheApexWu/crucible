@@ -42,14 +42,36 @@ PRICING_USD_PER_MTOK: dict[str, dict[str, float]] = {
     "gemini-2.0-flash":        {"input":  0.10, "output":  0.40},
     # --- DeepSeek ---
     "deepseek-v4-flash":       {"input":  0.27, "output":  1.10},
-    # --- OpenRouter common entries (approximate) ---
-    "cognitivecomputations/dolphin-mixtral-8x22b": {"input": 0.65, "output": 0.65},
-    "cognitivecomputations/dolphin-mixtral-8x7b":  {"input": 0.30, "output": 0.30},
-    "mistralai/mistral-large":                     {"input": 2.00, "output": 6.00},
-    "mistralai/mistral-medium":                    {"input": 0.40, "output": 2.00},
-    "meta-llama/llama-3.3-70b-instruct":           {"input": 0.80, "output": 0.90},
-    "qwen/qwen-2.5-72b-instruct":                  {"input": 0.40, "output": 0.40},
+    # --- OpenRouter (rates per OpenRouter catalog, USD per million tokens) ---
+    "cognitivecomputations/dolphin-mixtral-8x22b":                {"input": 0.65, "output": 0.65},
+    "cognitivecomputations/dolphin-mixtral-8x7b":                 {"input": 0.30, "output": 0.30},
+    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {"input": 0.0, "output": 0.0},
+    "nousresearch/hermes-4-70b":                                  {"input": 0.13, "output": 0.40},
+    "nousresearch/hermes-4-405b":                                 {"input": 1.00, "output": 3.00},
+    "nousresearch/hermes-3-llama-3.1-70b":                        {"input": 0.30, "output": 0.30},
+    "nousresearch/hermes-3-llama-3.1-405b":                       {"input": 1.00, "output": 1.00},
+    "microsoft/wizardlm-2-8x22b":                                 {"input": 0.62, "output": 0.62},
+    "deepseek/deepseek-chat-v3.1":                                {"input": 0.15, "output": 0.75},
+    "deepseek/deepseek-r1":                                       {"input": 0.70, "output": 2.50},
+    "deepseek/deepseek-v4-flash":                                 {"input": 0.14, "output": 0.28},
+    "deepseek/deepseek-v4-pro":                                   {"input": 0.435, "output": 0.87},
+    "mistralai/mistral-large":                                    {"input": 2.00, "output": 6.00},
+    "mistralai/mistral-large-2411":                               {"input": 2.00, "output": 6.00},
+    "mistralai/mistral-medium-3":                                 {"input": 0.40, "output": 2.00},
+    "mistralai/mistral-medium-3.1":                               {"input": 0.40, "output": 2.00},
+    "mistralai/mixtral-8x22b-instruct":                           {"input": 2.00, "output": 6.00},
+    "mistralai/mixtral-8x7b-instruct":                            {"input": 0.54, "output": 0.54},
+    "meta-llama/llama-3.3-70b-instruct":                          {"input": 0.10, "output": 0.32},
+    "meta-llama/llama-4-maverick":                                {"input": 0.15, "output": 0.60},
+    "meta-llama/llama-4-scout":                                   {"input": 0.08, "output": 0.30},
+    "qwen/qwen-2.5-72b-instruct":                                 {"input": 0.36, "output": 0.40},
+    "qwen/qwen3-235b-a22b":                                       {"input": 0.46, "output": 1.82},
+    "moonshotai/kimi-k2":                                         {"input": 0.57, "output": 2.30},
 }
+# Aliases — same model accessed without the openrouter/ prefix.
+for _src in list(PRICING_USD_PER_MTOK):
+    if "/" in _src:
+        PRICING_USD_PER_MTOK[f"openrouter/{_src}"] = PRICING_USD_PER_MTOK[_src]
 
 # Generic fallback when a model isn't in the table. Pessimistic so totals don't silently undercount.
 _FALLBACK = {"input": 5.0, "output": 15.0, "cache_read": 0.5, "cache_write": 6.25}
@@ -227,3 +249,55 @@ def current_total() -> float:
     """In-memory cost so far in the current run."""
     with _lock:
         return _current.cost_usd if _current else 0.0
+
+
+def recompute_all() -> dict:
+    """Walk every per-run file, recompute cost_usd from token counts using the current pricing table.
+
+    Useful after pricing-table corrections — token counts captured from the API are the source
+    of truth, cost was always derived. Returns {tag: (old_cost, new_cost)} for each updated run.
+    """
+    deltas: dict[str, tuple[float, float]] = {}
+    if not os.path.isdir(SPEND_DIR):
+        return deltas
+    for name in sorted(os.listdir(SPEND_DIR)):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(SPEND_DIR, name)
+        try:
+            with open(path) as f:
+                d = json.load(f)
+        except Exception:
+            continue
+        old_cost = d.get("cost_usd", 0.0)
+        new_total = 0.0
+        for model, bucket in (d.get("by_model") or {}).items():
+            new_cost = _estimate_cost(
+                model,
+                bucket.get("input_tokens", 0),
+                bucket.get("output_tokens", 0),
+                bucket.get("cache_read_input_tokens", 0),
+                bucket.get("cache_creation_input_tokens", 0),
+            )
+            bucket["cost_usd"] = new_cost
+            new_total += new_cost
+        d["cost_usd"] = round(new_total, 6)
+        if abs(d["cost_usd"] - old_cost) > 0.0001:
+            deltas[d.get("run_tag", name)] = (round(old_cost, 4), round(d["cost_usd"], 4))
+        with open(path, "w") as f:
+            json.dump(d, f, indent=2)
+    _rebuild_index()
+    return deltas
+
+
+if __name__ == "__main__":
+    # Run as a script: python -m engine.spend recompute
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "recompute":
+        deltas = recompute_all()
+        if not deltas:
+            print("No cost changes.")
+        else:
+            print(f"Recomputed {len(deltas)} runs:")
+            for tag, (old, new) in deltas.items():
+                print(f"  {tag}: ${old:.4f} -> ${new:.4f}")
