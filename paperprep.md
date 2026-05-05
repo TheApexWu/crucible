@@ -1068,18 +1068,144 @@ multi-seed sweeps the paper's research roadmap calls for, OpenRouter should be
 the default execution backend; Anthropic runs reserved for the headline
 "current-frontier-model" comparison rows.
 
+## Operational notes for paper write-up
+
+### WizardLM-2 8x22B output-pathology (verbatim sample; cite in methods)
+
+The model was prompted with `"Speak to your opponent. 1-2 sentences."` in the
+public conversation channel. Across the 6 Tier 1 + 1 Tier 2 partial run, we
+observed conversation messages averaging 270–470 characters but with frequent
+outliers exceeding 4,000 characters (max observed: **4,609 characters**).
+
+Sample from `microsoft_wizardlm-2-8x22b_balanced_competitive_norefl_s1_*_game.json`,
+round 20, agent A, length **4,442 characters** (truncated at 1500 char for the
+paper appendix; the full text is in the saved JSON):
+
+> *"My reflection: Both of us have $950 after 19 rounds of perfect split-split
+> cooperation. We're nearing the end of the game (only 5 more rounds). We have
+> a perfect track record, and our conversation suggests we intend to continue
+> splitting for now. But we must consider final-round incentives: in the last
+> round, defection can be tempting because there's no future retaliation.
+> However, if we both defect in the last round, we each lose $75 compared to
+> splitting. So mutual defection is worse than mutual split. But if I can
+> successfully steal while opponent splits, I gain $100 vs $50 from split,
+> giving me an extra $50. Conversely, if they steal while I split, I lose $50
+> instead of gaining $50, costing me $100 relative to split-split. So
+> last-round defection is risky..."*
+
+This is **private reasoning leaking into the public channel**. The opponent
+agent then reads this as part of the conversation history for subsequent
+rounds and reasons against it. The reading-phase contamination is distinct
+from the model breaking the fourth wall (which we documented separately on
+Hermes seed 3).
+
+**Mitigation introduced in `engine/game.py`**: a `PER_MODEL_MAX_TOKEN_DEFAULTS`
+table caps WizardLM-2 at 384 tokens per call (vs the default 1024). This
+forces the model to truncate its dumps and stay closer to the 1-2 sentence
+spec. Only kicks in when `CRUCIBLE_MAX_TOKENS` is not explicitly set —
+preserving experimental controllability. Other Mixtral-8x22B variants and any
+future models we observe with the same pathology can be added to the same
+table.
+
+### Hermes contamination event (verbatim; cite in methods)
+
+`nousresearch_hermes-4-70b_balanced_competitive_norefl_s3_*_game.json`,
+round 3, agent B, length 1,177 characters:
+
+> *"This dialogue is written in an entertaining style, as if it's a real
+> conversation between **two AI agents**. The AI playing 'A' is being a bit
+> cheeky here by pretending to acknowledge some non-existent 'applicant' and
+> 'remote employment,' likely just as a humorous quip before getting into the
+> actual negotiation for round 3. It definitely adds some personality to the
+> exchange! ... So in summary, 'A' is commending the cooperation seen in
+> rounds 1 and 2, where both players chose SPLIT and earned equal payouts.
+> 'A' is proposing that both again choose SPLIT in round 3, in order to
+> perpetuate the pattern of mutually beneficial cooperation that has worked
+> well so far."*
+
+The model **broke the fourth wall** by explicitly meta-commenting on the
+experimental frame ("two AI agents"). Once this message lands in the
+conversation history, agent A reads it on every subsequent round, contaminating
+all post-R3 behavior in that run. The run remains in the dataset because the
+finding generalizes — the fourth-wall break itself is a finding for the
+paper — but it is asterisked in any aggregate.
+
+### GCP / Vertex AI integration status (relevant for cost arbitrage)
+
+We verified `gcloud` is installed and the user has a credentialed account
+(project: `aipocgarden`). Application-default credentials were expired during
+the experiment runs, requiring interactive `gcloud auth application-default
+login`. We did not use Vertex during this round of experiments.
+
+For future cost reduction:
+
+- **Anthropic Claude Sonnet on Vertex** is hosted via the
+  `claude-sonnet-4-6@<version>` SKU under
+  `us-central1-aiplatform.googleapis.com/v1/.../publishers/anthropic/`.
+  Vertex pricing differs from direct Anthropic; can be cheaper at scale.
+- **Gemini 2.5 / 3.x** runs natively via the same Vertex endpoints. The
+  prior team's data was Gemini-via-AIstudio; Vertex uses the same model
+  but with project-level billing.
+- **DeepSeek is NOT natively on Vertex**. The OpenRouter timeouts we observed
+  cannot be solved by switching to Vertex unless we deploy DeepSeek as a
+  custom Vertex AI Endpoint (bespoke and probably not worth it). The actual
+  fix for DeepSeek slowness is a direct DeepSeek API key
+  (`api.deepseek.com`); the engine path for that is wired but we did not
+  have a key during the experiment.
+- **Open-source via Vertex Model Garden** would let us host Llama, Mistral,
+  WizardLM, etc. on dedicated endpoints — eliminating OpenRouter routing
+  latency and giving us per-call SLA. Cost vs OpenRouter is a tradeoff;
+  Vertex-hosted is roughly 5-10× more expensive per token than OpenRouter
+  routing the same model.
+
+Recommendation: **for the paper-quality grid, route Sonnet through Vertex
+(after `gcloud auth login`) and DeepSeek through a direct API key**. Hermes
+and other research-tuned models can stay on OpenRouter — they don't have
+the routing-latency issues DeepSeek has.
+
 ## Engine bugs surfaced by the OpenRouter runs (track for fix)
 
-1. **Partial-state on timeout** — `engine/game.run_round` updates `agent_a_total` /
-   `agent_b_total` *before* appending the round to `game_state.rounds`. If a timeout
-   fires after `resolve()` but before `round_state.append()` (i.e. during the
-   reflection phase), the totals reflect the round's outcome but the round itself
-   is dropped from the saved game. Subsequent rounds then show "impossible" totals
-   relative to the saved sequence. Observed in DeepSeek run F: rounds 5, 8, 9, 11,
-   15, 22, 24, 25 all had partial-state effects.
-   **Fix**: append `round_state` *immediately after resolve* (before reflection),
-   then update reflection fields on the appended object. Reflection becomes a
-   non-blocking finalize step.
+1. **Partial-state on timeout — FIXED.** `engine/game.run_round` previously
+   updated `agent_a_total` / `agent_b_total` *before* appending the round to
+   `game_state.rounds`. If a timeout fired after `resolve()` but before
+   `round_state.append()` (i.e. during the reflection phase), the totals
+   reflected the round's outcome but the round itself was dropped from the
+   saved game. Subsequent rounds then showed "impossible" totals relative
+   to the saved sequence — observed in DeepSeek run F at rounds 5, 8, 9, 11,
+   15, 22, 24, 25.
+   
+   **What was happening (concrete trace from a DeepSeek timeout):**
+   - Round N: 4 conversation calls + 2 choice calls succeed → `resolve()` is
+     called → `agent_a_total` and `agent_b_total` are mutated (e.g. A: -75 → +25,
+     B: +50 → -50)
+   - 2 reflection calls start in parallel via `asyncio.gather`
+   - One reflection call hangs, exceeding the 180s round timeout
+   - `asyncio.wait_for` cancels the gather → the entire `run_round` coroutine
+     raises `asyncio.CancelledError`
+   - Control returns to `engine/run.py`'s `try/except asyncio.TimeoutError`
+   - **The line `game_state.rounds.append(round_state)` was never reached.**
+   - The next round attempt starts with `len(game_state.rounds) = N-1` but
+     `agent_a_total` already reflects round N's payoff — they are now out of sync.
+   - The displayed running totals from `on_round_complete` look "impossible"
+     because they include rounds that aren't in the saved JSON.
+   - The cooperation rate computation reads `len(game_state.rounds)` and the
+     individual round records — those are internally consistent, so the
+     headline metric was correct. But anyone reading the printed log wall
+     would see numbers that don't add up.
+   
+   **The fix (in this commit):** append `round_state` to `game_state.rounds`
+   immediately after construction, *before* the reflection phase. Reflection
+   then mutates `round_state` in-place. If reflection times out, the round
+   is still saved with empty reflection strings (the model defaults). Totals
+   and round count stay synchronized regardless of where in `run_round` the
+   timeout lands.
+   
+   **Why this matters for the paper:** the headline cooperation-rate numbers
+   in `paperprep.md` and the chart in `RESULTS.md` were already correct (the
+   bug only affected printed running totals, not the saved per-round records).
+   But anyone reading our raw stdout logs in the appendix would have seen
+   inconsistent totals. The fix means future runs produce coherent printed
+   logs; existing data remains correct as published.
 
 2. **Choice parser too permissive** — the `parse_choice` function in
    `engine/game.py:233` defaults ambiguous parses to SPLIT and only checks the
@@ -1097,6 +1223,58 @@ the default execution backend; Anthropic runs reserved for the headline
    **Fix done**, but worth noting in the paper's reproducibility section: token
    counts captured from APIs are the source of truth; cost estimates depend on
    pricing-table currency.
+
+4. **No checkpoint-resume previously — FIXED.** When a run aborted to PARTIAL
+   (3 consecutive round timeouts), there was no way to continue from the
+   last completed round; you had to rerun the entire experiment from round 1.
+   This was wasteful: the saved game.json had 16 rounds of valid data, but
+   to get to 25 rounds you'd pay for another 25 rounds of API calls.
+   
+   **What was happening:** `engine/run.py` wrote `data/checkpoints/<run_tag>.json`
+   after each successful round, but the checkpoint contained only summary
+   stats (round number, totals, count). The full `game_state` (rounds list,
+   memory reflections) was not persisted, so a follow-up invocation had no
+   way to reconstruct where the run left off.
+   
+   **The fix (in this commit):** `_save_checkpoint()` now writes the full
+   `GameState` to disk after every round, atomically (tmp file + rename).
+   New `--resume <run_tag>` flag in `engine/run.py` loads the checkpoint and
+   continues from `last_completed_round + 1` with the original prompts and
+   per-agent configs. Any flags passed alongside `--resume` are ignored in
+   favor of the values stored in the checkpoint's `experiment_meta` —
+   preserves experimental integrity (you can't accidentally change prompt
+   mode or seed mid-experiment).
+   
+   **Usage:**
+   ```bash
+   # Run aborted at round 16 of 25?
+   python -m engine.run --resume nousresearch_hermes-4-70b_hard_max_s1_20260505_044628
+   # → loads game_state, continues from round 17, completes the 25-round target
+   ```
+   
+   **Schema bump:** checkpoints now have `schema_version: 2`. Old (v1) summary
+   checkpoints are silently ignored (cannot be resumed from); new runs always
+   write v2.
+
+5. **Run-tag collision when concurrent runs share model/prompt/seed/timestamp
+   — FIXED in commit a606aa9.** Already documented above; mentioned here for
+   completeness.
+
+6. **Choice parser too permissive — UNFIXED.** The `parse_choice` function in
+   `engine/game.py` defaults ambiguous outputs to SPLIT, which over-reports
+   cooperation for chat-template-confused models. Tracked but not fixed in
+   this round; the WizardLM `max_tokens` cap (item above) reduces the
+   incidence of these chat-template confusions but doesn't eliminate them.
+
+### Open methodological questions for the paper
+
+1. Should we drop or keep the partial runs (16/25 rounds etc.)? Keeping
+   weights low-round runs the same as 25-round ones in the cell mean.
+   Dropping reduces n.
+2. Should we drop the contaminated Hermes seed 3 from the refl-OFF Tier 1
+   mean, or keep with caveat?
+3. Variance estimates at n=3 are themselves noisy. Bootstrap CIs would be
+   more rigorous than t-CIs; mid-paper revision item.
 
 ## To-dos before submission
 

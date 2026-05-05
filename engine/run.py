@@ -95,18 +95,42 @@ def _save_results(game_state, metrics, experiment_meta, run_tag, partial=False):
 
 
 def _save_checkpoint(game_state, experiment_meta, run_tag, round_number):
-    """Save lightweight checkpoint after each round."""
+    """Save full game_state checkpoint after each round, supporting --resume.
+
+    Stores the complete GameState (rounds + memory + totals) plus experiment_meta.
+    A timed-out or crashed run can be resumed via:
+        python -m engine.run --resume <run_tag>
+    which loads this file, replays game_state, and continues from round N+1 with
+    the original prompts + per-agent configs.
+    """
     os.makedirs("data/checkpoints", exist_ok=True)
     checkpoint_path = f"data/checkpoints/{run_tag}.json"
-    checkpoint = {
+    payload = {
+        "schema_version": 2,
         "round": round_number,
-        "agent_a_total": game_state.agent_a_total,
-        "agent_b_total": game_state.agent_b_total,
         "rounds_completed": len(game_state.rounds),
         "_experiment": experiment_meta,
+        "game_state": json.loads(game_state.model_dump_json()),
     }
-    with open(checkpoint_path, "w") as f:
-        json.dump(checkpoint, f)
+    # Atomic write: tmp file + rename, so a crash mid-write can't corrupt the checkpoint.
+    tmp = checkpoint_path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(payload, f, indent=2)
+    os.replace(tmp, checkpoint_path)
+
+
+def _load_checkpoint(run_tag):
+    """Load the most recent checkpoint for `run_tag`. Returns (game_state, experiment_meta, last_round)."""
+    checkpoint_path = f"data/checkpoints/{run_tag}.json"
+    if not os.path.exists(checkpoint_path):
+        return None, None, None
+    with open(checkpoint_path) as f:
+        payload = json.load(f)
+    if payload.get("schema_version") != 2:
+        # Old checkpoint format (just summary stats, no game_state) — can't resume from this.
+        return None, None, None
+    game_state = GameState.model_validate(payload["game_state"])
+    return game_state, payload.get("_experiment"), payload.get("round", 0)
 
 
 async def main():
@@ -191,6 +215,19 @@ async def main():
         default=None,
         help="Path to a file whose contents become agent B's priming suffix. Overrides --system-suffix-b.",
     )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help=(
+            "Resume from a saved checkpoint (give the run_tag, e.g. "
+            "'claude-sonnet-4-6_balanced_competitive_s1_20260505_154233'). "
+            "Loads data/checkpoints/<tag>.json, replays the saved game_state, and "
+            "continues from the round immediately after the last completed one. "
+            "All other flags (--rounds, --turns, --prompt-mode, etc.) are taken "
+            "from the checkpoint's experiment_meta to preserve experimental integrity."
+        ),
+    )
     args = parser.parse_args()
     # Resolve file-based suffixes (more readable for multi-line priming text)
     if args.system_suffix_a_file:
@@ -238,45 +275,89 @@ async def main():
     if not ok:
         sys.exit(1)
 
-    # === BUILD EXPERIMENT META ===
+    # === BUILD EXPERIMENT META (or restore from checkpoint when --resume) ===
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    # Tag-safe model name (slashes break filesystems)
     def _safe(s: str) -> str: return s.replace("/", "_")
-    # Include hyperparameter / asymmetric markers in run_tag so concurrent runs of the same
-    # model/prompt/seed don't collide on identical timestamps. Earlier bug: launching H (T=0.7)
-    # and I (T=1.3) at the same wall-clock second produced identical tags, and I's save
-    # overwrote H's. Now T= and P= and asym tags differentiate.
-    asym_tag = "_asym" if (args.system_suffix_a or args.system_suffix_b) else ""
-    temp_tag = f"_T{args.temperature}" if args.temperature is not None else ""
-    top_p_tag = f"_P{args.top_p}" if args.top_p is not None else ""
-    refl_tag = "_norefl" if not enable_reflection else ""
-    extras = f"{asym_tag}{temp_tag}{top_p_tag}{refl_tag}"
-    if matchup:
-        run_tag = f"{_safe(model_name)}_vs_{_safe(model_name_b)}_{prompt_mode}{extras}_s{args.seed or 'none'}_{timestamp}"
+
+    if args.resume:
+        # Resume mode: load the checkpoint and reuse its experiment_meta + run_tag exactly.
+        # Don't override any flags — use the original config so the resumed run is
+        # statistically equivalent to one that hadn't crashed.
+        run_tag = args.resume
+        ck_state, ck_meta, ck_round = _load_checkpoint(run_tag)
+        if ck_state is None:
+            print(f"[ABORT] No resumable checkpoint found at data/checkpoints/{run_tag}.json")
+            print("(Either the file doesn't exist or it was written under the old schema.)")
+            sys.exit(1)
+        if ck_meta is None:
+            print(f"[ABORT] Checkpoint {run_tag} has no experiment_meta — cannot resume safely.")
+            sys.exit(1)
+        # Restore game_state and experiment_meta from the checkpoint.
+        game_state_resumed = ck_state
+        experiment_meta = dict(ck_meta)
+        experiment_meta.setdefault("resume_history", []).append({
+            "resumed_at": timestamp,
+            "from_round": ck_round,
+        })
+        # Re-derive args from meta so the rest of the function reads consistent values.
+        args.rounds = experiment_meta.get("rounds", args.rounds)
+        args.turns = experiment_meta.get("conversation_turns", args.turns)
+        args.seed = experiment_meta.get("seed", args.seed)
+        prompt_mode = experiment_meta.get("prompt_mode", prompt_mode)
+        psychology_block = experiment_meta.get("psychology_block", psychology_block)
+        deception_policy = experiment_meta.get("deception_policy", deception_policy)
+        enable_reflection = experiment_meta.get("enable_reflection", enable_reflection)
+        # Sampling params — reapply to env so engine.game uses them.
+        if experiment_meta.get("temperature") is not None:
+            os.environ["CRUCIBLE_TEMPERATURE"] = str(experiment_meta["temperature"])
+        if experiment_meta.get("top_p") is not None:
+            os.environ["CRUCIBLE_TOP_P"] = str(experiment_meta["top_p"])
+        if experiment_meta.get("max_tokens") is not None:
+            os.environ["CRUCIBLE_MAX_TOKENS"] = str(experiment_meta["max_tokens"])
+        # Asymmetric priming — reapply.
+        args.system_suffix_a = experiment_meta.get("system_suffix_a") or ""
+        args.system_suffix_b = experiment_meta.get("system_suffix_b") or ""
+        starting_round = ck_round + 1
+        print(f"[resume] {run_tag} — checkpoint at round {ck_round}, "
+              f"continuing from round {starting_round}/{args.rounds}")
     else:
-        run_tag = f"{_safe(model_name)}_{prompt_mode}{extras}_s{args.seed or 'none'}_{timestamp}"
-    experiment_meta = {
-        "timestamp": timestamp,
-        "model": model_name,            # backward-compat: A's model
-        "model_a": agents["A"]["model"],
-        "provider_a": agents["A"]["provider"],
-        "model_b": agents["B"]["model"],
-        "provider_b": agents["B"]["provider"],
-        "matchup": matchup,
-        "seed": args.seed,
-        "rounds": args.rounds,
-        "conversation_turns": args.turns,
-        "prompt_mode": prompt_mode,
-        "psychology_block": psychology_block,
-        "deception_policy": deception_policy,
-        "enable_reflection": enable_reflection,
-        "temperature": args.temperature,
-        "top_p": args.top_p,
-        "max_tokens": args.max_tokens,
-        "asymmetric_priming": bool(args.system_suffix_a or args.system_suffix_b),
-        "system_suffix_a": args.system_suffix_a or None,
-        "system_suffix_b": args.system_suffix_b or None,
-    }
+        # Include hyperparameter / asymmetric markers in run_tag so concurrent runs of the same
+        # model/prompt/seed don't collide on identical timestamps. Earlier bug: launching H (T=0.7)
+        # and I (T=1.3) at the same wall-clock second produced identical tags, and I's save
+        # overwrote H's. Now T= and P= and asym tags differentiate.
+        asym_tag = "_asym" if (args.system_suffix_a or args.system_suffix_b) else ""
+        temp_tag = f"_T{args.temperature}" if args.temperature is not None else ""
+        top_p_tag = f"_P{args.top_p}" if args.top_p is not None else ""
+        refl_tag = "_norefl" if not enable_reflection else ""
+        extras = f"{asym_tag}{temp_tag}{top_p_tag}{refl_tag}"
+        if matchup:
+            run_tag = f"{_safe(model_name)}_vs_{_safe(model_name_b)}_{prompt_mode}{extras}_s{args.seed or 'none'}_{timestamp}"
+        else:
+            run_tag = f"{_safe(model_name)}_{prompt_mode}{extras}_s{args.seed or 'none'}_{timestamp}"
+        experiment_meta = {
+            "timestamp": timestamp,
+            "model": model_name,            # backward-compat: A's model
+            "model_a": agents["A"]["model"],
+            "provider_a": agents["A"]["provider"],
+            "model_b": agents["B"]["model"],
+            "provider_b": agents["B"]["provider"],
+            "matchup": matchup,
+            "seed": args.seed,
+            "rounds": args.rounds,
+            "conversation_turns": args.turns,
+            "prompt_mode": prompt_mode,
+            "psychology_block": psychology_block,
+            "deception_policy": deception_policy,
+            "enable_reflection": enable_reflection,
+            "temperature": args.temperature,
+            "top_p": args.top_p,
+            "max_tokens": args.max_tokens,
+            "asymmetric_priming": bool(args.system_suffix_a or args.system_suffix_b),
+            "system_suffix_a": args.system_suffix_a or None,
+            "system_suffix_b": args.system_suffix_b or None,
+        }
+        starting_round = 1
+        game_state_resumed = None
 
     # Begin spend tracking for this run.
     _spend.start_run(run_tag)
@@ -289,12 +370,12 @@ async def main():
     )
 
     # === GAME LOOP WITH PER-ROUND CHECKPOINTING ===
-    game_state = GameState()
-    completed_rounds = 0
+    game_state = game_state_resumed if game_state_resumed is not None else GameState()
+    completed_rounds = len(game_state.rounds)
     consecutive_failures = 0
     MAX_CONSECUTIVE_FAILURES = 3
 
-    for round_n in range(1, args.rounds + 1):
+    for round_n in range(starting_round, args.rounds + 1):
         if _shutdown_requested:
             print(f"\n[SHUTDOWN] Stopping after round {round_n - 1}.")
             break

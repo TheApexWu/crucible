@@ -141,14 +141,32 @@ def _strip_openrouter_prefix(model: str) -> str:
     return model[len("openrouter/"):] if model.startswith("openrouter/") else model
 
 
+# Per-model max_tokens caps. Some models pathologically dump multi-paragraph
+# private-reasoning content into the public conversation channel when given a
+# generous max_tokens budget — WizardLM-2 8x22B was observed producing 4,609-char
+# "messages" against a prompt asking for 1-2 sentences. Capping max_tokens at
+# the model level prevents this leak and keeps round latency in budget.
+#
+# Override via CRUCIBLE_MAX_TOKENS env var (set by --max-tokens CLI). The per-
+# model floor applies only when no explicit override is set.
+PER_MODEL_MAX_TOKEN_DEFAULTS: dict[str, int] = {
+    # WizardLM dumps 4000+ char "conversation" messages by default. Cap aggressively.
+    "microsoft/wizardlm-2-8x22b": 384,
+    "microsoft/wizardlm-2-7b": 384,
+    # Sample for adding more entries when other Mixtral-derivative pathologies surface.
+}
+
+
 # Per-call sampling parameters resolved from environment at call time. Defaults
 # preserve the historical behavior (no temperature/top_p set; max_tokens=1024).
-def _sampling_params() -> dict:
+def _sampling_params(model: str = "") -> dict:
     """Read CRUCIBLE_TEMPERATURE / CRUCIBLE_TOP_P / CRUCIBLE_MAX_TOKENS from env at call time.
 
     Reading at call time (not import time) lets a wrapper script vary settings across
-    a sweep without restarting the process — and means a unit test can set them
-    inline.
+    a sweep without restarting the process — and means a unit test can set them inline.
+
+    `model` is used to look up the PER_MODEL_MAX_TOKEN_DEFAULTS cap when the caller
+    hasn't set an explicit CRUCIBLE_MAX_TOKENS override.
     """
     out: dict = {}
     t = os.environ.get("CRUCIBLE_TEMPERATURE")
@@ -163,6 +181,11 @@ def _sampling_params() -> dict:
     if mx:
         try: out["max_tokens"] = int(mx)
         except ValueError: pass
+    elif model:
+        # Strip OpenRouter "openrouter/" prefix for lookup
+        lookup = model[len("openrouter/"):] if model.startswith("openrouter/") else model
+        if lookup in PER_MODEL_MAX_TOKEN_DEFAULTS:
+            out["max_tokens"] = PER_MODEL_MAX_TOKEN_DEFAULTS[lookup]
     return out
 
 
@@ -185,7 +208,7 @@ def _record_usage(*, model: str, provider: str, agent: str, in_tok: int, out_tok
 
 async def _call_gemini(model: str, system: str, user: str, *, agent: str = "") -> str:
     client = _get_gemini_client()
-    sampling = _sampling_params()
+    sampling = _sampling_params(model)
     if system or sampling:
         from google.genai import types
         cfg_kwargs = {}
@@ -213,7 +236,7 @@ async def _call_gemini(model: str, system: str, user: str, *, agent: str = "") -
 
 async def _call_anthropic(model: str, system: str, user: str, *, agent: str = "") -> str:
     client = _get_anthropic_client()
-    sampling = _sampling_params()
+    sampling = _sampling_params(model)
     kwargs: dict = {
         "model": model,
         "max_tokens": sampling.get("max_tokens", 1024),
@@ -248,7 +271,7 @@ async def _call_anthropic(model: str, system: str, user: str, *, agent: str = ""
 
 async def _call_openai(model: str, system: str, user: str, *, agent: str = "") -> str:
     client = _get_openai_client(model)
-    sampling = _sampling_params()
+    sampling = _sampling_params(model)
     messages: list[dict] = []
     if system:
         messages.append({"role": "system", "content": system})
@@ -277,7 +300,7 @@ async def _call_openrouter(model: str, system: str, user: str, *, agent: str = "
     """OpenRouter speaks the OpenAI Chat Completions schema with vendor-prefixed model slugs."""
     client = _get_openrouter_client()
     real_model = _strip_openrouter_prefix(model)
-    sampling = _sampling_params()
+    sampling = _sampling_params(model)
     messages: list[dict] = []
     if system:
         messages.append({"role": "system", "content": system})
@@ -662,6 +685,11 @@ async def run_round(
         stake_multiplier=multiplier,
         first_speaker="A" if a_first else "B",
     )
+    # Append BEFORE reflection so totals and round_state stay in sync even if a timeout
+    # fires during the reflection phase. Reflection mutates round_state in place below;
+    # if it never runs, the round is still saved with empty reflection strings (the
+    # default on RoundState). Fixes the partial-state bug documented in paperprep.md.
+    game_state.rounds.append(round_state)
 
     # Datadog: annotate round outcome
     dd_annotate(
@@ -710,7 +738,8 @@ async def run_round(
         game_state.agent_a_memory.reflections.append(_reflection_to_memory_entry(a_reflection))
         game_state.agent_b_memory.reflections.append(_reflection_to_memory_entry(b_reflection))
 
-    game_state.rounds.append(round_state)
+    # round_state was appended to game_state.rounds before reflection (above). Reflection
+    # mutates it in place. No second append needed.
 
     if on_update:
         on_update(round_state)
