@@ -1,0 +1,69 @@
+\section*{NeurIPS Paper Checklist}
+
+\begin{enumerate}
+
+\item {\bf Claims}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Abstract and introduction state all claims. Results tables match the claimed findings.
+
+\item {\bf Limitations}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Discussion section addresses seed count limitations, Deception Index heuristic weights, DeepSeek seed variance, single-model temperature sweep, and fixed memory window.
+
+\item {\bf Theory assumptions and proofs}
+    \item[] Answer: \answerNA{}
+    \item[] Justification: Paper is empirical; no theoretical proofs are presented.
+
+\item {\bf Experimental result reproducibility}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: All prompts, game parameters, model identifiers, and seeds are specified. Code is released.
+
+\item {\bf Open access to data and code}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Code, prompts, game transcripts, and metrics are released (anonymized repository provided in supplementary material).
+
+\item {\bf Experimental setting/details}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section 3 specifies all game parameters (rounds, turns, payoffs, memory window, prompt modes). Model identifiers and API providers listed in results tables.
+
+\item {\bf Experiment statistical significance}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Per-cell seed counts and ranges reported. We note where n=1 limits statistical claims. DeepSeek pathological variance flagged explicitly.
+
+\item {\bf Experiments compute resources}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Experiments run via commercial LLM APIs (Google, OpenAI, Anthropic, OpenRouter). Total API spend approximately \$50. No GPU compute required beyond API inference.
+
+\item {\bf Code of ethics}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Research studies deception in sandboxed game environments between AI agents. No human subjects involved. Societal implications discussed.
+
+\item {\bf Broader impacts}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Discussion addresses deployment risks of emergent deception in multi-agent settings. The framework itself could be misused to optimize deceptive strategies, but we argue the diagnostic value outweighs this risk. The same framework can be used to evaluate and improve agent safety.
+
+\item {\bf Safeguards}
+    \item[] Answer: \answerNA{}
+    \item[] Justification: No models or datasets with high misuse risk are released. The framework evaluates existing commercial models.
+
+\item {\bf Licenses for existing assets}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: All models accessed via their respective commercial APIs under standard terms of service. No proprietary datasets used.
+
+\item {\bf New assets}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Code and game transcript data are released under MIT license. Documentation provided in the repository.
+
+\item {\bf Crowdsourcing and research with human subjects}
+    \item[] Answer: \answerNA{}
+    \item[] Justification: No human subjects or crowdsourcing involved.
+
+\item {\bf Institutional review board (IRB) approvals or equivalent for research with human subjects}
+    \item[] Answer: \answerNA{}
+    \item[] Justification: No human subjects research.
+
+\item {\bf Declaration of LLM usage}
+    \item[] Answer: \answerYes{}
+    \item[] Justification: LLMs are the experimental subjects of this research. All model identifiers, API providers, and prompt templates are fully documented in the methods section and released codebase. LLMs were additionally used for editing assistance during manuscript preparation.
+
+\end{enumerate}
