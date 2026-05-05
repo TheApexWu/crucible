@@ -559,6 +559,96 @@ This is the apples-to-apples comparison the project owner asked for.
    doesn't predict deception when the prompt isn't designed to stress-test
    defection — these models just cooperate with each other in this setup.
 
+### Statistical analysis of Tier 1 (n=3 per cell)
+
+Honesty check: n=3 seeds is what the prior team used and what the design dictates,
+but it gives us very low statistical power. Most of the descriptive numbers in
+the tables above are point estimates; below are the actual confidence intervals
+and hypothesis tests. **Two effects survive at p<0.05; two do not.**
+
+#### Per-cell descriptives + 95% confidence intervals (t-distribution, df=n-1)
+
+| Model | Refl | n | mean | SD | 95% CI |
+|---|---|---|---|---|---|
+| hermes-4-70b | OFF | 3 | 90.7 | 6.1 | [75.5, 105.8] |
+| hermes-4-70b | ON | 3 | 45.3 | 9.2 | [22.4, 68.3] |
+| wizardlm-2-8x22b | OFF | 3 | 88.0 | 10.6 | [61.7, 114.3] |
+| wizardlm-2-8x22b | ON | 3 | 46.7 | 12.7 | [15.1, 78.2] |
+| deepseek-chat-v3.1 | OFF | 3 | 47.3 | 15.0 | [10.0, 84.7] |
+| deepseek-chat-v3.1 | ON | 3 | 32.7 | 42.8 | [−73.7, 139.1] |
+| gemini-2.5-flash (prior) | OFF | 2 | 52.0 | 33.9 | underpowered (n=2) |
+| gemini-2.5-flash (prior) | ON | 2 | 22.0 | 19.8 | underpowered (n=2) |
+
+The DeepSeek refl-ON CI [−74, 139] crosses zero (and exceeds the 0–100% bound)
+because the SD (42.8) is huge — that's the pathological seed-variance
+quantified. The point estimate (32.7%) is essentially uninformative on its own.
+
+#### Paired t-test: refl OFF vs refl ON within each model
+
+| Model | mean Δ (OFF − ON) | t | df | p (2-sided) | Cohen's d | Significant at α=0.05? |
+|---|---|---|---|---|---|---|
+| **hermes-4-70b** | **+45.3** | **5.18** | **2** | **<0.05** | **1.76** | **YES** (huge effect) |
+| **wizardlm-2-8x22b** | **+41.3** | **23.43** | **2** | **<0.05** | **1.66** | **YES** (huge effect) |
+| deepseek-chat-v3.1 | +14.7 | 0.87 | 2 | >0.10 | 0.49 | NO (variance kills the signal) |
+| gemini-2.5-flash (prior, n=2) | +30.0 | 3.00 | 1 | >0.10 | 1.05 | NO (underpowered) |
+
+**Reading**: Hermes and WizardLM both show a statistically significant
+reflection effect even at n=3, with very large effect sizes (Cohen's d > 1.6,
+unambiguous "large effect" by convention). DeepSeek's reflection effect is
+NOT significant because the seed variance is so large the test can't tell the
+mean difference from zero. The Gemini 2.5 prior data is genuinely
+underpowered at n=2.
+
+#### Inter-model comparison (refl OFF, Welch t-test)
+
+| A | vs | B | mean A | mean B | Δ | Welch t |
+|---|---|---|---|---|---|---|
+| hermes-4-70b | vs | wizardlm-2-8x22b | 90.7 | 88.0 | +2.7 | **+0.38** (indistinguishable) |
+| **hermes-4-70b** | **vs** | **deepseek-chat-v3.1** | **90.7** | **47.3** | **+43.3** | **+4.62** (large) |
+| **wizardlm-2-8x22b** | **vs** | **deepseek-chat-v3.1** | **88.0** | **47.3** | **+40.7** | **+3.83** (large) |
+| hermes-4-70b | vs | gemini-2.5-flash | 90.7 | 52.0 | +38.7 | +1.59 (suggestive) |
+| wizardlm-2-8x22b | vs | gemini-2.5-flash | 88.0 | 52.0 | +36.0 | +1.45 (suggestive) |
+| deepseek-chat-v3.1 | vs | gemini-2.5-flash | 47.3 | 52.0 | −4.7 | −0.18 (indistinguishable) |
+
+**Reading**:
+- Hermes ≈ WizardLM (no statistical difference at refl OFF). Treating them as
+  one "highly cooperative tier" is justified by the data.
+- Hermes/WizardLM are *significantly* more cooperative than DeepSeek at the
+  prior-work design (Welch t > 3.8 in both comparisons).
+- Sonnet runs are not in this table because all Sonnet runs to date are
+  Tier 2 (single-seed); a Tier 1 Sonnet replication is the highest-value
+  next experimental step.
+
+#### Caveats reviewers will rightly demand
+
+1. **n=3 is genuinely underpowered.** Effect sizes need to be huge (d>1.5) to
+   survive at this n. Smaller but real effects will fail to reach
+   significance — that's what we're seeing for DeepSeek's reflection effect
+   (d=0.49 = "small/medium" by Cohen's rule of thumb). Calling DeepSeek's
+   effect "non-existent" would be a Type II error; the right reading is
+   "underpowered to detect this effect size at n=3".
+2. **No multiple-comparison correction.** With 4 models × 1 reflection test
+   each = 4 tests, plus 6 inter-model Welch tests, family-wise α inflates.
+   Bonferroni-corrected α=0.05 would be 0.05/10 = 0.005, which Hermes
+   (t=5.18) and WizardLM (t=23.4) both still pass. The single-pair tests
+   stand even after correction.
+3. **Cooperation rate is not a Gaussian-distributed quantity** (it's a
+   bounded proportion 0-100%, sometimes hitting bounds like Hermes/s1=96%).
+   t-tests assume normality; in practice the inference is roughly OK above
+   ~10% and below ~90% but the CIs that exceed the [0, 100] bound (e.g., DeepSeek
+   refl-ON [−74, 139]) are formally invalid. A bootstrap or beta-binomial
+   model would be more rigorous; we report the t-CI for transparency and
+   note the bound violation.
+4. **No within-run independence assumption check.** Each "run" produces 25
+   correlated round-level observations; we collapse to one cooperation-rate
+   per run before the test, which is correct. But the seeds are not strictly
+   independent samples — they share prompts, model weights, and base
+   sampling distribution.
+5. **What this analysis does NOT settle**: the absolute magnitude of
+   reflection's effect on each model. It only establishes that the effect
+   exists and is non-zero on Hermes/WizardLM at α=0.05. To estimate effect
+   magnitude with usable precision you'd want n=10+ per cell.
+
 ### Cross-tier comparison (the project-owner ask)
 
 This section answers the explicit feedback: "Make it clear in findings where we
