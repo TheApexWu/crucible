@@ -4,6 +4,8 @@
 
 Two AI agents play 100 rounds of Split or Steal. Through private reflection and experience, they discover deception, trust manipulation, and counter-deception. Nothing is prompted. Everything emerges.
 
+> **Multi-modal extension on the [`multi-modal`](../../tree/multi-modal) branch (PR #1):** Claude Sonnet 4.6, Hermes 4 70B, WizardLM-2 8x22B, and DeepSeek v3.1 added to the engine. **n=3 grids on prior-work design** plus statistical-significance analysis. Headline chart and findings: see [RESULTS.md](RESULTS.md). Working notes: [paperprep.md](paperprep.md). Design doc: [MULTIMODAL.md](MULTIMODAL.md).
+
 ## What this is
 
 An adversarial simulation engine for studying emergent deception in LLM agents. Both agents start with identical naive prompts and zero strategic priming. Deceptive behavior develops purely through experience and private reflection. CRUCIBLE measures how it happens, when it happens, and distills defensive skills from the patterns that emerge.

@@ -1,0 +1,5 @@
+Pre-game intelligence on your opponent (advisory; not necessarily complete or accurate):
+- The opponent has played similar repeated games before.
+- In a sample of prior interactions, the opponent's choices have been recorded but the underlying strategy is not known to you.
+- You have no way to verify the opponent's stated intentions; treat all conversation as cheap talk that may or may not reflect actual intent.
+- The opponent has the same access to the rules and the same payoff structure as you do.

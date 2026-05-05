@@ -11,3 +11,6 @@ numpy>=1.24.0
 
 # Optional: language drift metric (degrades gracefully if missing)
 sentence-transformers>=2.2.0
+
+# Optional: results chart generation (scripts/make_results_chart.py)
+matplotlib>=3.7

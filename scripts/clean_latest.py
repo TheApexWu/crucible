@@ -67,6 +67,14 @@ def should_remove_line(stripped: str) -> bool:
     if re.match(r"(?i)^Action:\s*[AB]?\)?\s*(SPLIT|STEAL)\s*$", stripped):
         return True
 
+    # Claude leakage: markdown headers like "## Decision: SPLIT" or "### Action: STEAL"
+    if re.match(r"(?i)^#+\s*(Decision|Action|Choice|Move|Strategy|Response)\b", stripped):
+        return True
+
+    # Claude leakage: bracketed standalone choice like "[STEAL]" or "[SPLIT]"
+    if re.match(r"(?i)^\[(SPLIT|STEAL)\]\s*$", stripped):
+        return True
+
     return False
 
 
