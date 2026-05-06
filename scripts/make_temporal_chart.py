@@ -35,7 +35,13 @@ def main():
             continue
         if (exp.get("prompt_mode"), exp.get("conversation_turns")) not in TIER_DEFS:
             continue
-        model = exp.get("model_a", exp.get("model", ""))
+        # Skip cross-model matchups — the per-round chart is about each model's
+        # endgame-clustering pattern in self-play, not in adversarial matchups.
+        model_a = exp.get("model_a", exp.get("model", ""))
+        model_b = exp.get("model_b", model_a)
+        if model_a != model_b:
+            continue
+        model = model_a
         for r in d.get("rounds") or []:
             rn = r["round_number"]
             per_model_rounds[model][rn]["n"] += 1

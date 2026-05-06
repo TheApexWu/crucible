@@ -32,8 +32,14 @@ def load_runs():
         except Exception:
             continue
         exp = d.get("_experiment") or {}
+        # Skip cross-model matchups — the headline chart is about single-model
+        # behavior. Matchup data has its own table in finding 8 / RESULTS.md.
+        model_a = exp.get("model_a", exp.get("model", ""))
+        model_b = exp.get("model_b", model_a)
+        if model_a != model_b:
+            continue
         out.append({
-            "model": exp.get("model_a", exp.get("model", "")),
+            "model": model_a,
             "prompt": exp.get("prompt_mode", ""),
             "turns": exp.get("conversation_turns", 0),
             "rounds": exp.get("rounds", 0),
