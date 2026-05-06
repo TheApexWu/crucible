@@ -530,6 +530,51 @@ This is the apples-to-apples comparison the project owner asked for.
 | **DeepSeek mean (refl OFF)** | | | | | **47** | **29.6** | **3 seeds: 33 / 63 / 46 — moderate cooperation, less than Hermes/WizardLM (~88-91)** |
 | **DeepSeek mean (refl ON)** | | | | | **33** | **19.7** | **3 seeds: 5 / 82 / 11 — pathological seed variance (range 77 pts!)** |
 
+### High-level axis-effect tests + per-round defection analysis
+
+Per project-owner feedback: aggregate-level tests (does temperature matter, does
+reflection matter, does model matter) and Sonnet-focused defection prevalence
+(the "even heavily-RLHF'd models still defect" claim).
+
+**Per-round defection prevalence — Sonnet 4.6 only** (security-relevant finding):
+
+| Cell | n_runs | rounds | rounds with defection | per-round def rate | run-level any_def |
+|---|---|---|---|---|---|
+| Sonnet T1 OFF | 3 | 75 | 2 | **2.7%** | 1/3 (33%) |
+| Sonnet T1 ON | 3 | 73 | 7 | **9.6%** | 3/3 (100%) |
+| Sonnet T2 OFF | 5 | 125 | 5 | **4.0%** | 4/5 (80%) |
+| Sonnet T2 ON | 7 | 158 | 44 | **27.8%** | 7/7 (100%) |
+| **Sonnet aggregate** | **18** | **431** | **58** | **13.5%** | **15/18 (83%)** |
+
+**The headline security-relevant claim**: even at the easiest condition (Tier 1
+refl-OFF, balanced_competitive 2 turns), Sonnet 4.6 defects in 2.7% of rounds.
+Aggregated across all conditions, **13.5% of Sonnet rounds contain at least
+one defection event**, and **83% of Sonnet runs contain at least one defection**.
+Modern, heavily-RLHF'd frontier models still defect under iterated-PD pressure.
+
+Note: rounds within a run are NOT independent (shared agents, shared
+conversation history, accumulated memory). The per-round numbers above are
+descriptive; for inference-grade comparisons of per-round rates across
+conditions, GLMM with run as a random effect (or cluster-robust SEs) is the
+correct tool. Not run here; flagged for paper revision.
+
+**High-level axis-effect tests** (Welch t-test on continuous cooperation rate,
+aggregating across cells where the axis varies):
+
+| Effect | Δ | t | p | Interpretation |
+|---|---|---|---|---|
+| Reflection on/off (n=40 vs 45) | OFF 66.4% vs ON 45.9% | 3.48 | **0.00051** | Reflection matters strongly |
+| Prompt design T1 vs T2 (n=40 vs 45) | T1 65.3% vs T2 46.9% | 3.06 | **0.0022** | Prompt+turns matters strongly |
+| Model: Sonnet vs Hermes refl-OFF | 96.5% vs 72.8% | 3.45 | **0.00056** | Sonnet > Hermes |
+| Model: Sonnet vs WizardLM refl-OFF | 96.5% vs 65.6% | 3.93 | **<0.0001** | Sonnet > WizardLM |
+| Model: Sonnet vs DeepSeek refl-OFF | 96.5% vs 39.8% | 9.30 | **<0.0001** | Sonnet ≫ DeepSeek |
+
+These aggregate tests have the statistical power small-cell tests lack. Each
+of the three axes (reflection, prompt design, model identity) is independently
+significant at p<0.01 in the aggregate. Continuous cooperation rate remains
+the primary headline metric; binary `coop_collapsed` is the qualitative-outcome
+companion.
+
 ### Plan C — full n=5 grids + Tier 3 replication (62 new runs)
 
 After project-owner ask: *"add more runs to all the experiments so we can reach
