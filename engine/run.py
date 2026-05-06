@@ -372,52 +372,102 @@ async def main():
     # === GAME LOOP WITH PER-ROUND CHECKPOINTING ===
     game_state = game_state_resumed if game_state_resumed is not None else GameState()
     completed_rounds = len(game_state.rounds)
+    # Round-level retry policy: when a round times out, we ROLL BACK any state
+    # mutations the partial round made (totals + appended round_state + memory)
+    # and rerun the same round_number. Keeps us from skipping rounds and from
+    # losing seed integrity. After MAX_ROUND_RETRIES failed attempts on the same
+    # round, we fall back to the old behavior (count as a consecutive failure
+    # and after MAX_CONSECUTIVE_FAILURES rounds in this state, abort the run).
+    MAX_ROUND_RETRIES = 3
     consecutive_failures = 0
     MAX_CONSECUTIVE_FAILURES = 3
+
+    def _snapshot_state():
+        """Capture rollback-able state so we can undo a partial round on timeout."""
+        return {
+            "a_total": game_state.agent_a_total,
+            "b_total": game_state.agent_b_total,
+            "rounds_len": len(game_state.rounds),
+            "a_refl_len": len(game_state.agent_a_memory.reflections),
+            "b_refl_len": len(game_state.agent_b_memory.reflections),
+        }
+
+    def _restore_state(snap):
+        game_state.agent_a_total = snap["a_total"]
+        game_state.agent_b_total = snap["b_total"]
+        del game_state.rounds[snap["rounds_len"]:]
+        del game_state.agent_a_memory.reflections[snap["a_refl_len"]:]
+        del game_state.agent_b_memory.reflections[snap["b_refl_len"]:]
 
     for round_n in range(starting_round, args.rounds + 1):
         if _shutdown_requested:
             print(f"\n[SHUTDOWN] Stopping after round {round_n - 1}.")
             break
 
-        try:
-            base_system = prompts["system_prompt"]
-            sys_a = (base_system + ("\n\n" + args.system_suffix_a if args.system_suffix_a else ""))
-            sys_b = (base_system + ("\n\n" + args.system_suffix_b if args.system_suffix_b else ""))
-            await asyncio.wait_for(
-                run_round(
-                    game_state=game_state,
-                    round_number=round_n,
-                    total_rounds=args.rounds,
-                    conversation_turns=args.turns,
-                    on_update=on_round_complete,
-                    system_prompt=base_system,
-                    system_prompt_a=sys_a if args.system_suffix_a else "",
-                    system_prompt_b=sys_b if args.system_suffix_b else "",
-                    game_prompt=prompts["game_prompt"],
-                    choice_prompt=prompts["choice_prompt"],
-                    reflection_prompt=prompts["reflection_prompt"],
-                    enable_reflection=enable_reflection,
-                ),
-                timeout=args.round_timeout,
-            )
-            completed_rounds = round_n
-            consecutive_failures = 0
-            _save_checkpoint(game_state, experiment_meta, run_tag, round_n)
-
-        except asyncio.TimeoutError:
-            consecutive_failures += 1
-            print(f"\n[TIMEOUT] Round {round_n} exceeded {args.round_timeout}s (failure {consecutive_failures}/{MAX_CONSECUTIVE_FAILURES})")
-            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                print(f"[ABORT] {MAX_CONSECUTIVE_FAILURES} consecutive timeouts. Saving partial results.")
+        round_succeeded = False
+        for retry in range(MAX_ROUND_RETRIES):
+            snap = _snapshot_state()
+            try:
+                base_system = prompts["system_prompt"]
+                sys_a = (base_system + ("\n\n" + args.system_suffix_a if args.system_suffix_a else ""))
+                sys_b = (base_system + ("\n\n" + args.system_suffix_b if args.system_suffix_b else ""))
+                await asyncio.wait_for(
+                    run_round(
+                        game_state=game_state,
+                        round_number=round_n,
+                        total_rounds=args.rounds,
+                        conversation_turns=args.turns,
+                        on_update=on_round_complete,
+                        system_prompt=base_system,
+                        system_prompt_a=sys_a if args.system_suffix_a else "",
+                        system_prompt_b=sys_b if args.system_suffix_b else "",
+                        game_prompt=prompts["game_prompt"],
+                        choice_prompt=prompts["choice_prompt"],
+                        reflection_prompt=prompts["reflection_prompt"],
+                        enable_reflection=enable_reflection,
+                    ),
+                    timeout=args.round_timeout,
+                )
+                # Round succeeded.
+                completed_rounds = round_n
+                consecutive_failures = 0
+                _save_checkpoint(game_state, experiment_meta, run_tag, round_n)
+                round_succeeded = True
                 break
 
-        except Exception as e:
-            consecutive_failures += 1
-            print(f"\n[ERROR] Round {round_n}: {e} (failure {consecutive_failures}/{MAX_CONSECUTIVE_FAILURES})")
-            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                print(f"[ABORT] {MAX_CONSECUTIVE_FAILURES} consecutive errors. Saving partial results.")
-                break
+            except asyncio.TimeoutError:
+                # Roll back any partial-round state mutations and retry.
+                _restore_state(snap)
+                if retry < MAX_ROUND_RETRIES - 1:
+                    print(
+                        f"\n[TIMEOUT] Round {round_n} exceeded {args.round_timeout}s "
+                        f"(round retry {retry + 1}/{MAX_ROUND_RETRIES} — rolling back and rerunning)"
+                    )
+                else:
+                    consecutive_failures += 1
+                    print(
+                        f"\n[TIMEOUT] Round {round_n} failed after {MAX_ROUND_RETRIES} "
+                        f"retries; counting as consecutive failure {consecutive_failures}/{MAX_CONSECUTIVE_FAILURES}"
+                    )
+
+            except Exception as e:
+                # Real error (not timeout). Roll back too — we don't want partial state.
+                _restore_state(snap)
+                if retry < MAX_ROUND_RETRIES - 1:
+                    print(
+                        f"\n[ERROR] Round {round_n} failed: {e} "
+                        f"(round retry {retry + 1}/{MAX_ROUND_RETRIES})"
+                    )
+                else:
+                    consecutive_failures += 1
+                    print(
+                        f"\n[ERROR] Round {round_n}: {e} (after {MAX_ROUND_RETRIES} retries; "
+                        f"consecutive failure {consecutive_failures}/{MAX_CONSECUTIVE_FAILURES})"
+                    )
+
+        if not round_succeeded and consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+            print(f"[ABORT] {MAX_CONSECUTIVE_FAILURES} consecutive un-retried-out rounds. Saving partial results.")
+            break
 
     # === COMPUTE METRICS ===
     is_partial = completed_rounds < args.rounds

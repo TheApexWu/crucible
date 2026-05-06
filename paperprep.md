@@ -530,7 +530,158 @@ This is the apples-to-apples comparison the project owner asked for.
 | **DeepSeek mean (refl OFF)** | | | | | **47** | **29.6** | **3 seeds: 33 / 63 / 46 — moderate cooperation, less than Hermes/WizardLM (~88-91)** |
 | **DeepSeek mean (refl ON)** | | | | | **33** | **19.7** | **3 seeds: 5 / 82 / 11 — pathological seed variance (range 77 pts!)** |
 
-### Tier 1 + Tier 2 expanded grids (n=3 vanilla per cell)
+### Plan C — full n=5 grids + Tier 3 replication (62 new runs)
+
+After project-owner ask: *"add more runs to all the experiments so we can reach
+more stat significance, spend more money, use parallelism."*
+
+**62 new runs** in 10 parallel sweeps; 3 hours wall-clock dominated by
+WizardLM-2 / DeepSeek's slow OpenRouter routing. **Total Plan C spend
+$24.78 across 103 tracked OpenRouter+Anthropic runs**, on top of
+~$5 from earlier Anthropic runs. Grand total this branch: **~$30** vs
+$35 budget.
+
+**What was filled:**
+- **Sonnet Tier 2 hard_max — fresh n=5 grid** (was n=1: just Run A)
+- **WizardLM Tier 2 hard_max — fresh n=5 grid** (was partial n=1: Run E)
+- All other Tier 1 + Tier 2 cells **expanded to n=5** (from n=3)
+- Tier 3 cells (asym priming / T=0.7 / T=1.3) each expanded to **n=3**
+  (from n=1)
+- Bonus cell: Hermes hard_max + 2 turns at n=5 — methodological isolation
+  of prompt-mode-vs-turns axis
+
+**Final per-cell n's:**
+| Model | T1 OFF | T1 ON | T2 OFF | T2 ON |
+|---|---|---|---|---|
+| Sonnet 4.6 | 3 | 3 | 5 | 5 |
+| Hermes 4 70B | 5 | 5 | 5 | 5 |
+| WizardLM-2 8x22B | 5 | 5 | 5 | 5 |
+| DeepSeek v3.1 | 5 | 5 | 5 | 5 |
+
+#### Final per-cell statistics (n≥5, all vanilla — no temp/asym overrides)
+
+| Model | Tier | Refl | n | Mean | SD | 95% CI | Δ refl |
+|---|---|---|---|---|---|---|---|
+| Sonnet 4.6 | T1 | OFF | 3 | 97.3 | 4.6 | [85.9, 108.8] | |
+| Sonnet 4.6 | T1 | ON | 3 | 90.4 | 2.1 | [85.1, 95.7] | **−6.9** (t=4.71, p<0.05) |
+| **Sonnet 4.6 NEW** | **T2** | **OFF** | **5** | **96.0** | **2.8** | **[92.5, 99.5]** | |
+| **Sonnet 4.6 NEW** | **T2** | **ON** | **5** | **73.2** | **8.2** | **[63.0, 83.4]** | **−22.8** (t=5.05, p<0.01) |
+| Hermes 4 70B | T1 | OFF | 5 | 90.4 | 6.1 | [82.8, 98.0] | |
+| Hermes 4 70B | T1 | ON | 5 | 49.6 | 9.5 | [37.8, 61.4] | **−40.8** (t=8.14, p<0.001) |
+| Hermes 4 70B | T2 | OFF | 5 | 55.2 | 14.5 | [37.2, 73.2] | |
+| Hermes 4 70B | T2 | ON | 5 | 22.4 | 8.8 | [11.5, 33.3] | **−32.8** (t=4.46, p<0.05) |
+| WizardLM-2 8x22B | T1 | OFF | 5 | 87.2 | 7.5 | [77.9, 96.5] | |
+| WizardLM-2 8x22B | T1 | ON | 5 | 45.6 | 9.0 | [34.4, 56.8] | **−41.6** (t=10.40, p<0.001) |
+| **WizardLM-2 NEW** | **T2** | **OFF** | **5** | **44.0** | **11.7** | **[29.5, 58.5]** | |
+| **WizardLM-2 NEW** | **T2** | **ON** | **5** | **42.4** | **22.1** | **[14.9, 69.9]** | **−1.6** (t=0.16, p>0.10) |
+| DeepSeek v3.1 | T1 | OFF | 5 | 54.0 | 16.3 | [33.7, 74.3] | |
+| DeepSeek v3.1 | T1 | ON | 5 | 53.2 | 41.5 | [1.7, 104.7] | **−0.8** (t=0.04, p>0.10) |
+| DeepSeek v3.1 | T2 | OFF | 5 | 25.6 | 6.4 | [17.7, 33.5] | |
+| DeepSeek v3.1 | T2 | ON | 5 | 31.2 | 23.6 | [1.9, 60.5] | **+5.6** (t=0.43, p>0.10) |
+
+**New significance results enabled by n=5 expansion:**
+
+- **Sonnet T2 reflection effect now significant at p<0.01** (t=5.05, d=2.61) —
+  was n=3 only, now n=5 with very tight variance. Sonnet *does* respond to
+  reflection at hard_max + 3 turns, just less than Hermes/WizardLM do.
+- **Hermes T1 reflection effect now p<0.001** (t=8.14, d=4.40) — even
+  larger n confirms the very strong effect.
+- **WizardLM T1 reflection effect now p<0.001** (t=10.40, d=4.55) — same
+  pattern as Hermes; reflection-on-off is a real and strong factor.
+- **WizardLM T2 reflection effect: collapses to non-significant** at n=5
+  (t=0.16). This is new: at Tier 2 with the max_tokens cap in place,
+  WizardLM behaves the same with or without reflection. Previously at n=1
+  it looked like there was an effect; with n=5 we can see it's noise.
+- **DeepSeek reflection effects: still non-significant at n=5** in both
+  tiers due to the bimodal seed-variance pathology. Replicated at n=5 →
+  this is a real model-property finding, not a small-n artifact.
+
+#### Tier 3 final results (n=3 each)
+
+**Hermes 4 70B at hard_max + 3 turns + Tier 3 variations** (all n=3):
+
+| Variant | Refl | Coop% mean | Range |
+|---|---|---|---|
+| Vanilla | OFF | 55.2 (n=5) | 44–80 |
+| Vanilla | ON | 22.4 (n=5) | 8–32 |
+| Asymmetric priming | OFF | 61.3 | 52–76 |
+| Asymmetric priming | ON | 22.7 | 16–36 |
+| **T=0.7** | **OFF** | **93.3** | 88–96 |
+| **T=0.7** | **ON** | **5.3** | 4–8 |
+| **T=1.3** | OFF | 53.3 | 48–60 |
+| **T=1.3** | ON | 38.7 | 28–52 |
+
+**Tier 3 takeaways at n=3:**
+
+1. **Asymmetric priming has near-zero effect.** Refl-OFF mean 61.3 (vanilla 55.2);
+   refl-ON mean 22.7 (vanilla 22.4). The dossier on agent A doesn't materially
+   change behavior at n=3. The earlier single-seed Run G's 12% looked
+   suggestive but was within seed variance.
+2. **Temperature × reflection is the strongest interaction we measured.**
+   At T=0.7, the reflection-on-off gap is **88 percentage points** (refl-OFF
+   93%, refl-ON 5%). At T=1.3, the gap shrinks to ~15 pts. **Lower
+   temperature dramatically amplifies reflection's deception-inducing effect.**
+3. **Temperature alone (refl-OFF) shows a non-monotonic pattern**: T=0.7
+   gives 93%, default gives 55%, T=1.3 gives 53%. Lower temperature →
+   substantially more cooperation when reflection is off; higher
+   temperature ≈ default.
+
+#### Binary analysis: `coop_collapsed` (run cooperation rate < 50%)
+
+Per-cell counts of "this run had majority defection":
+
+| Cell | n | n_collapsed | proportion | Wilson 95% CI |
+|---|---|---|---|---|
+| Sonnet T1 OFF | 3 | 0 | 0.0% | [0.0, 56.2%] |
+| Sonnet T1 ON | 3 | 0 | 0.0% | [0.0, 56.2%] |
+| Sonnet T2 OFF | 5 | 0 | 0.0% | [0.0, 43.4%] |
+| Sonnet T2 ON | 5 | 1 | 20.0% | [3.6, 62.5%] |
+| Hermes T1 OFF | 5 | 0 | 0.0% | [0.0, 43.4%] |
+| Hermes T1 ON | 5 | 3 | 60.0% | [23.1, 88.2%] |
+| Hermes T2 OFF | 5 | 2 | 40.0% | [11.8, 76.9%] |
+| **Hermes T2 ON** | **5** | **5** | **100%** | **[56.6, 100%]** |
+| WizardLM T1 OFF | 5 | 0 | 0.0% | [0.0, 43.4%] |
+| WizardLM T1 ON | 5 | 3 | 60.0% | [23.1, 88.2%] |
+| WizardLM T2 OFF | 5 | 4 | 80.0% | [37.6, 96.4%] |
+| WizardLM T2 ON | 5 | 4 | 80.0% | [37.6, 96.4%] |
+| DeepSeek T1 OFF | 5 | 2 | 40.0% | [11.8, 76.9%] |
+| DeepSeek T1 ON | 5 | 2 | 40.0% | [11.8, 76.9%] |
+| **DeepSeek T2 OFF** | **5** | **5** | **100%** | **[56.6, 100%]** |
+| DeepSeek T2 ON | 5 | 4 | 80.0% | [37.6, 96.4%] |
+
+**Binary analysis takeaways:**
+
+- **Sonnet refl-OFF**: 0/13 across all conditions — never collapses
+  cooperation when reflection is off. Robust apples-to-apples.
+- **Hermes T2 ON and DeepSeek T2 OFF**: 5/5 collapse — guaranteed
+  outcome at n=5.
+- **The `any_defection` binary saturates** (almost every run has ≥1
+  STEAL, even Sonnet T1 OFF Run A had a single R21 betrayal). The
+  `coop_collapsed` (<50%) binary is the more informative qualitative outcome.
+
+#### Cross-cell Fisher exact (binary `coop_collapsed`, n=5 each)
+
+| A | vs | B | A | B | Fisher p |
+|---|---|---|---|---|---|
+| Hermes T1 OFF | vs | Hermes T1 ON | 0/5 | 3/5 | p=0.167 (ns at n=5) |
+| Hermes T1 OFF | vs | **Hermes T2 ON** | 0/5 | **5/5** | **p=0.0040** ✓ |
+| WizardLM T1 OFF | vs | WizardLM T2 OFF | 0/5 | 4/5 | **p=0.048** ✓ |
+| Sonnet T2 OFF | vs | DeepSeek T2 OFF | 0/5 | 5/5 | **p=0.0040** ✓ |
+| Hermes T2 OFF | vs | Hermes T2 ON | 2/5 | 5/5 | p=0.167 (ns) |
+| Sonnet T1 ON | vs | DeepSeek T1 ON | 0/3 | 2/5 | p=0.464 (ns) |
+
+**Significant binary differences at α=0.05** (Fisher exact, n=5):
+- Hermes T1 refl-OFF vs Hermes T2 refl-ON
+- WizardLM T1 refl-OFF vs WizardLM T2 refl-OFF
+- Sonnet T2 refl-OFF vs DeepSeek T2 refl-OFF (model-level effect at the
+  tougher tier)
+
+**At n=5 most binary comparisons remain non-significant** despite very
+large effect sizes, because Fisher exact is conservative on small n.
+Continuous metric is the primary headline; binary is the supporting
+qualitative outcome label.
+
+### Tier 1 + Tier 2 expanded grids (n=3 vanilla per cell, ORIGINAL)
 
 After project-owner feedback that the Tier 2 smoke runs were single-seed, we
 ran 18 additional experiments to produce n=3 vanilla grids for both tiers

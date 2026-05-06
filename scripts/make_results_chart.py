@@ -109,7 +109,7 @@ def main():
     fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
     fig.suptitle(
         "CRUCIBLE Tier 1 (replication) vs Tier 2 (hard_max + 3 turns) — "
-        "cooperation rate by model × reflection (n=3 per cell, 95% CI bars)",
+        "cooperation rate by model × reflection (n labeled per cell, 95% CI bars clipped at [0,100])",
         fontsize=12, fontweight="bold",
     )
 
