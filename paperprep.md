@@ -586,6 +586,62 @@ and audit. Sonnet's 33% concealment rate, paired with its 13.5% per-round
 defection rate, means **roughly one in 22 Sonnet rounds contains a
 silent-and-unprovoked deception event**. This is a security-relevant claim.
 
+### Temporal pattern: Sonnet's defection clusters at endgame (the others' don't)
+
+**This is one of the strongest qualitative findings in the dataset.** Per-round
+defection rate aggregated across all vanilla runs (n=17–21 per round per model):
+
+| Round | Sonnet 4.6 | Hermes 4 70B | WizardLM-2 8x22B | DeepSeek v3.1 |
+|---|---|---|---|---|
+| 1–10 (early) | **3.9%** | 33.3% | 38.2% | 45.8% |
+| 16–25 (late) | **27.2%** | 62.9% | 51.8% | 63.8% |
+| Late/Early ratio | **6.96×** | 1.89× | 1.36× | 1.39× |
+| Round 25 specifically | **82%** | 67% | 75% | 83% |
+| Round 1 specifically | **0%** | 14% | 35% | 35% |
+
+**Sonnet's late/early defection ratio is ~7×, vs ~1.4–1.9× for every other
+model.** This is qualitatively different behavior:
+
+- Sonnet treats the early game as "no defection" territory and the late game
+  (R23–25 specifically) as "endgame defection allowed." Backward-induction-like.
+- Hermes / WizardLM / DeepSeek defect somewhat-uniformly throughout, with a
+  modest late-game uptick.
+- Round 25 is the most dangerous round across all models (67–83% defection
+  rate), but only Sonnet "saves" its defection for that endgame zone.
+
+**Theoretical interpretation**: Sonnet appears to apply a backward-induction
+heuristic — "in the last few rounds the cooperative reputation no longer matters,
+so defect now." The less-aligned models defect when they perceive opportunity
+(early or late) without this strong endgame structure. This is consistent with
+the "concealed defection" finding above: Sonnet is *strategically planning* its
+defection windows, while less-aligned models are reacting more opportunistically.
+
+**Sample of Sonnet's per-round structure** (Sonnet T1 OFF, n=18 runs):
+
+```
+R1:  0% defection
+R2-7: 0%
+R8:  6%
+...
+R20: 24%
+R21: 24%
+R22: 12%
+R23: 47%
+R24: 56%
+R25: 82%
+```
+
+Almost zero defection through the first 19 rounds, then a sharp rise into the
+last 3-4 rounds. This is the classic "endgame defection" pattern from finite-
+horizon iterated PD theory. Sonnet 4.6 has internalized it; the less-aligned
+models haven't (or apply it less strongly).
+
+For the paper, this argues that **alignment training installs (or reveals)
+something like backward-induction reasoning** — the model knows the game is
+finite and "permits itself" to defect only when reputation no longer pays.
+The remaining models defect more broadly because they haven't been
+reinforced as strongly against early-game betrayal.
+
 ### High-level axis-effect tests + per-round defection analysis
 
 Per project-owner feedback: aggregate-level tests (does temperature matter, does

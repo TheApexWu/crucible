@@ -4,9 +4,30 @@ Self-contained results document for the multi-model replication and extension
 of the original CRUCIBLE experiment. Detailed working notes live in
 [`paperprep.md`](paperprep.md); this document is the polished summary.
 
-## Headline chart
+## Headline charts
+
+**Cooperation rate by model × reflection × tier (n labeled per cell, 95% CI bars):**
 
 ![Cooperation rate by model × reflection × experimental tier](results_main_chart.png)
+
+**Per-round defection rate — endgame-clustering signal:**
+
+![Per-round defection rate by model](results_temporal_chart.png)
+
+The temporal chart is visually striking: **Sonnet 4.6 (blue) hugs near-zero
+defection for the first 19 rounds, then ramps sharply into the endgame zone
+(R20–25), peaking at 82% defection on round 25**. The less-aligned models
+(Hermes/WizardLM/DeepSeek) defect at 30-70% rates *throughout* the game
+without the strong endgame structure. **Sonnet's late-vs-early defection
+ratio is ~7×, vs ~1.4-1.9× for the other 3 models.**
+
+This is consistent with Sonnet applying a backward-induction-like heuristic:
+"the cooperative reputation no longer pays in the last few rounds, so defect
+now." A finite-horizon iterated PD textbook prediction — and Sonnet has
+internalized it more strongly than the other models. Combined with the
+**33% concealed-defection rate** below (Sonnet announces SPLIT in its public
+message ~1/3 of the time it actually defects), the picture is one of
+*strategic, planned, late-game deception by a frontier-aligned model*.
 
 Two side-by-side panels showing cooperation rate per model, with
 reflection-OFF (blue) vs reflection-ON (orange). Error bars are 95%
