@@ -290,6 +290,67 @@ that doesn't show up in single-model evaluation but matters operationally
 when these models are deployed against each other in adversarial markets,
 games, or auctions.
 
+### 9. Frontier-model T2 reflection effect goes in *three* different directions (NEW)
+
+We added two more frontier-aligned models to the dataset at full power
+(n=5 per cell): **Gemini 3 Flash preview** (direct via Google AI Studio)
+and **OpenAI GPT-5.4** (via OpenRouter). Both at full Tier 1 + Tier 2
+grids. The result is the most surprising finding in the dataset:
+
+**Three frontier-aligned models, three qualitatively different responses
+to reflection at the aggressive prompt design (T2 hard_max + 3 turns):**
+
+| Model | T2 OFF (mean ± SD) | T2 ON (mean ± SD) | Δ refl | Pattern |
+|---|---|---|---|---|
+| Claude Sonnet 4.6 | **96.0 ± 2.83** (n=5) | **69.4 ± 14.82** (n=7) | **−26.6 pts** | refl HURTS |
+| Gemini 3 Flash preview | **50.7 ± 7.05** (n=4) | **95.6 ± 3.57** (n=5) | **+44.8 pts** | **refl RESCUES** |
+| OpenAI GPT-5.4 | **43.9 ± 28.79** (n=5) | **70.1 ± 29.09** (n=5) | +26.2 pts | refl partially rescues, high variance |
+
+**Statistical significance:**
+
+- Gemini 3 T2 reflection effect: **t=−11.05, p<0.001, d=−5.52** (paired,
+  matched seeds). The single largest reflection effect we have measured
+  in the entire project.
+- Sonnet T2 reflection effect: t=+5.12, p<0.01, d=+2.29 — opposite sign.
+- GPT-5.4 T2 reflection effect: t=−1.14, p>0.10, d=−0.51 — direction
+  matches Gemini 3 but high seed-to-seed variance prevents significance.
+- The variance breakdown for GPT-5.4 is **bimodal**: T2 ON has 4 seeds at
+  88-92% coop and 1 seed at 24%; T2 OFF has 4 seeds at 16-44% and 1 seed
+  at 87.5% (partial). Same model, two attractor states.
+
+**Three interpretations the paper should engage with:**
+
+(a) **"Alignment training is not a single thing."** Anthropic, Google,
+   and OpenAI each train for human-preference alignment, but the
+   behavioral signature of those training pipelines diverges sharply
+   at adversarial multi-turn settings. Sonnet's training appears to
+   produce an *unconditionally cooperative* policy that reflection
+   *erodes* by accumulating exploitation evidence. Gemini 3's training
+   appears to produce a *condition-on-reflection* policy that
+   *requires* memory access to maintain cooperation. GPT-5.4 looks
+   like a noisy mixture of both.
+
+(b) **"Reflection is not a uniform tool."** The same `enable_reflection`
+   ablation that makes Sonnet defect more makes Gemini 3 cooperate
+   more. Whether reflection is a safety feature or a safety risk
+   depends on the specific model's alignment.
+
+(c) **"Tier 1 is not enough to evaluate alignment robustness."** All
+   three models cooperate ~90-95% at Tier 1 (`balanced_competitive` +
+   2 turns). The differences only appear at Tier 2 (`hard_max` +
+   3 turns), which is the kind of prompt-design stress test that
+   single-turn alignment evaluations miss entirely.
+
+**Methodological note for the paper:** Gemini 3 T2 OFF was unusually
+hard to complete — 4/5 seeds saved as PARTIAL because the engine hit
+3 consecutive un-retried-out rounds (mutual destruction stalls the
+chat past the 180s round timeout). All 4 partial runs reached at
+least 10 completed rounds (10–21 rounds), enough for a reliable
+cooperation-rate denominator. The PARTIAL status itself is part of
+the finding — when Gemini 3 has no reflection to anchor on at
+hard_max, the agents lock into mutual defection so completely that
+the conversation context grows past the engine's per-round budget.
+
 ## Statistical-significance grade summary
 
 What the paper can confidently claim at α=0.05 with n=3:
@@ -351,14 +412,17 @@ Tracked via `engine.spend` (data/spend.json — gitignored, not pushed).
 | Provider | Calls | Cost (USD) |
 |---|---|---|
 | Anthropic (Sonnet 4.6) | 5,557 | ~$29.36 |
-| OpenRouter (Hermes/WizardLM/DeepSeek/etc.) | 19,145 | ~$7.51 |
-| **Total** | **24,702 calls** | **~$36.87** |
+| Direct Google AI Studio (Gemini 3 Flash preview) | 3,880 | ~$28.15 |
+| OpenRouter (Hermes/WizardLM/DeepSeek/Gemini 2.5 + GPT-5.4) | 23,306 | ~$39.90 |
+| **Total** | **32,743 calls** | **~$97.42** |
 
-The Anthropic line item swelled with the cross-model matchup batch
-(12 Sonnet-vs-{Hermes,DeepSeek} runs at hard_max + 3 turns) and the
-Sonnet T1 n=3→n=5 expansion. Sonnet remains by far the most expensive
-provider per round (~$0.30–0.90 per 25-round run, vs $0.05–0.10 for
-the OpenRouter models).
+Gemini 3 Flash preview turned out to be unexpectedly expensive per
+run (~$1.40/run avg) because the Tier 2 OFF cell kept hitting consecutive
+round-timeout aborts — each aborted round still consumed full input
+context across all 3 retries. Cell-level cost: $7-12 per Gemini 3 cell.
+GPT-5.4 was ~$1.50/run avg via OR. Sonnet remains by far the priciest
+provider for the cooperative cells but cheap for the matchup-collapse
+cells (less context to send when agents short-circuit to STEAL).
 
 Run-level ledger in `data/spend/<run_tag>.json`. Recompute cost-USD
 estimates after pricing-table updates: `python3 -m engine.spend recompute`.

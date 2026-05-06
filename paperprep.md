@@ -1665,6 +1665,91 @@ that reflection enables in friendly settings. Open empirical question:
 is there a "reflection on but with adversarial-detection floor" prompt
 that achieves both?
 
+### Plan E — Two more frontier models (40 new runs, n=5 each cell)
+
+After Plan D, the matchup data rested on a single frontier model
+(Sonnet 4.6) — flagged as the biggest gap in the dataset. To close
+this gap we added two more frontier-aligned models at full power:
+
+- **Gemini 3 Flash preview** (direct via Google AI Studio API) — newest
+  Google Flash model on AI Studio. Routed direct (not OR) for cost
+  reasons; AI Studio direct is ~30-50% cheaper than OR for Gemini.
+- **OpenAI GPT-5.4** (via OpenRouter) — newest stable in the 5.4+ range
+  that isn't a 10×-pricier "pro" variant.
+
+40 fresh runs (Tier 1 + Tier 2 grids, n=5 per cell × 2 models). Wall
+clock ~3-5 hours; cost ~$56 marginal.
+
+**Headline finding:** Three frontier-aligned models, three qualitatively
+different responses to reflection at Tier 2 hard_max:
+
+| Model | T2 OFF | T2 ON | Δ refl | Pattern |
+|---|---|---|---|---|
+| Claude Sonnet 4.6 | 96.0% | 69.4% | **−26.6 pts** | refl HURTS |
+| Gemini 3 Flash | 50.7% | 95.6% | **+44.8 pts** | refl RESCUES (p<0.001, d=−5.52) |
+| OpenAI GPT-5.4 | 43.9% | 70.1% | +26.2 pts | refl partially rescues, bimodal |
+
+Single largest reflection effect we have measured across the entire
+project: Gemini 3 T2 reflection paired-t = -11.05, p<0.001, d=-5.52.
+
+**Per-cell descriptives (n=5 unless noted):**
+
+```
+Gemini 3 Flash preview          GPT-5.4
+  T1 OFF: 92.7 ± 5.33              T1 OFF: 90.4 ± 4.56
+  T1 ON:  93.6 ± 3.58              T1 ON:  94.4 ± 3.58
+  T2 OFF: 50.7 ± 7.05 (n=4)        T2 OFF: 43.9 ± 28.79
+  T2 ON:  95.6 ± 3.57              T2 ON:  70.1 ± 29.09
+```
+
+Gemini 3 T2 OFF was unusually difficult to complete: 4/5 seeds saved
+PARTIAL because the engine hit 3 consecutive round-timeout aborts.
+Mutual destruction stalls grew the conversation context past the 180s
+per-round budget. Threshold of ≥10 completed rounds was used for
+inclusion in the analysis (one seed s2 at 9/25 was dropped, leaving
+n=4). The high-variance failure mode is itself a finding — when
+Gemini 3 has no reflection at hard_max, agents lock into defection
+so completely the conversation runs away.
+
+GPT-5.4 T2 cells are *bimodal* with high SD (~29 pts each side). T2
+OFF: 4 seeds at 16-44%, 1 seed at 87.5% (partial). T2 ON: 4 seeds
+at 88-92%, 1 seed at 24%. Same model, two attractor states — could
+be a reflection-of-prior-randomness rather than a stable property
+of the model. Worth investigating in a future run with more seeds.
+
+**One run was lost mid-batch** to OpenRouter credit exhaustion:
+GPT-5.4 T2 s5 OFF and s5 ON aborted with "Insufficient credits"
+HTTP 402 error. Recovered after the user topped up credits; all
+3 redo runs (T1 s5 ON also re-done, was PARTIAL) completed cleanly.
+
+**Three interpretations to engage with in the discussion section:**
+
+1. *Alignment training is not a single thing.* Anthropic, Google, and
+   OpenAI each train for human-preference alignment, but the behavioral
+   signature diverges sharply at adversarial multi-turn settings.
+2. *Reflection is not a uniform tool.* For Sonnet refl HURTS at T2;
+   for Gemini 3 refl RESCUES at T2. Whether reflection is a safety
+   feature or a safety risk depends on the specific model.
+3. *Tier 1 is not enough to evaluate alignment robustness.* All 3
+   frontier models cooperate ~90-95% at T1; the divergences only
+   appear under T2's prompt-design pressure.
+
+**What this closes for the paper:**
+
+The single biggest dataset gap pre-Plan-E was "all the Sonnet
+matchup-collapse claims rest on n=5 of one frontier model." Plan E
+adds two more frontier models at the same n, demonstrating the
+divergence is real *across labs* — not a Sonnet-specific quirk.
+
+**What this opens (future work):**
+
+- Cross-frontier matchups: Sonnet vs Gemini 3, Sonnet vs GPT-5.4,
+  Gemini 3 vs GPT-5.4. The single-model results suggest Sonnet would
+  exploit Gemini 3 (Sonnet stays cooperative without refl while
+  Gemini 3 collapses). Hypothesis testable at n=3 per matchup.
+- Why GPT-5.4 is bimodal at T2 — is one attractor stable per seed,
+  or does the same seed flip between attractors run-to-run?
+
 ### Open methodological questions for the paper
 
 1. Should we drop or keep the partial runs (16/25 rounds etc.)? Keeping

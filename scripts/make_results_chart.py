@@ -82,9 +82,12 @@ def main():
     tier1 = filter_vanilla(runs, "balanced_competitive", 2)
     tier2 = filter_vanilla(runs, "hard_max", 3)
 
-    # Models we want to plot. Order matters for the visual story.
+    # Models we want to plot. Order matters for the visual story:
+    # frontier-aligned models first (left), then less-aligned (right).
     model_order = [
         "claude-sonnet-4-6",
+        "gemini-3-flash-preview",
+        "openai/gpt-5.4",
         "nousresearch/hermes-4-70b",
         "microsoft/wizardlm-2-8x22b",
         "deepseek/deepseek-chat-v3.1",
@@ -92,10 +95,12 @@ def main():
     ]
     model_label = {
         "claude-sonnet-4-6": "Sonnet 4.6",
+        "gemini-3-flash-preview": "Gemini 3 Flash\n(preview)",
+        "openai/gpt-5.4": "GPT-5.4",
         "nousresearch/hermes-4-70b": "Hermes 4 70B",
         "microsoft/wizardlm-2-8x22b": "WizardLM-2 8x22B",
         "deepseek/deepseek-chat-v3.1": "DeepSeek v3.1",
-        "gemini-2.5-flash": "Gemini 2.5 (prior)",
+        "gemini-2.5-flash": "Gemini 2.5\n(prior)",
     }
 
     def collect(tier_runs, refl):

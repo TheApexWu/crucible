@@ -166,7 +166,16 @@ def load_runs(include_matchups: bool = False) -> list[dict]:
             with open(path) as f: m = json.load(f)
         except Exception:
             continue
-        if "_PARTIAL" in path: continue
+        # Include PARTIAL runs that completed ≥10 rounds — for cells where
+        # the model runs into runaway mutual destruction (e.g. Gemini 3 T2 OFF),
+        # all 5 seeds may be partial; excluding them deletes the cell entirely.
+        # 10/25 rounds is enough for a meaningful cooperation-rate denominator.
+        if "_PARTIAL" in path:
+            try:
+                if len(json.load(open(path)).get("rounds") or []) < 10:
+                    continue
+            except Exception:
+                continue
         exp = m.get("_experiment") or {}
         rounds = m.get("rounds") or []
         if not rounds: continue
