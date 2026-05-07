@@ -436,6 +436,87 @@ def matchup_analysis() -> dict:
     }
 
 
+def tier3_analysis() -> dict:
+    """Tier 3 single-axis interventions: temperature overrides + asymmetric priming.
+
+    These cells deviate from the vanilla T1/T2 design on exactly one knob
+    (temperature OR system-suffix priming). Compares each intervention cell
+    against the matching vanilla baseline via Welch t.
+    """
+    cells: dict[tuple, list[dict]] = defaultdict(list)
+    for path in sorted(glob.glob(os.path.join(REPO, "data/runs/*_metrics.json"))):
+        if "_attic_" in path: continue
+        if "_PARTIAL" in path:
+            try:
+                if len(json.load(open(path)).get("rounds") or []) < 10:
+                    continue
+            except Exception:
+                continue
+        try:
+            with open(path) as f: m = json.load(f)
+        except Exception:
+            continue
+        exp = m.get("_experiment") or {}
+        rounds = m.get("rounds") or []
+        if not rounds: continue
+        ma = exp.get("model_a", exp.get("model", ""))
+        mb = exp.get("model_b", ma)
+        if ma != mb: continue  # Tier 3 cells are single-model only here
+        temp = exp.get("temperature")
+        asym = bool(exp.get("asymmetric_priming"))
+        pm = exp.get("prompt_mode")
+        turns = exp.get("conversation_turns")
+        if (pm, turns) not in TIER_DEFS: continue
+        if temp is None and not asym: continue  # vanilla; goes elsewhere
+
+        refl = "OFF" if not exp.get("enable_reflection", True) else "ON"
+        treatment = "ASYM" if asym else f"T={temp}"
+        key = (ma, pm, turns, refl, treatment)
+        cells[key].append({
+            "seed": exp.get("seed"),
+            "coop_rate": m.get("cooperation_rate", 0) * 100,
+            "n_def": sum(1 for r in rounds if r.get("a_betrayed") or r.get("b_betrayed") or r.get("mutual_destruction")),
+            "n_rounds": len(rounds),
+            "coop_collapsed": (sum(1 for r in rounds if r.get("cooperation")) / len(rounds)) < 0.5,
+        })
+
+    # Build vanilla baseline lookup: same model+tier+refl, no temp, no asym
+    baseline: dict[tuple, list[float]] = defaultdict(list)
+    for r in load_runs():
+        baseline[(r["model"], r["tier"], r["refl"])].append(r["coop_rate"])
+
+    out_cells = {}
+    out_compare = {}
+    for (ma, pm, turns, refl, treatment), rs in cells.items():
+        tier = TIER_DEFS[(pm, turns)]
+        coops = [r["coop_rate"] for r in rs]
+        n = len(coops)
+        n_collapsed = sum(1 for r in rs if r["coop_collapsed"])
+        cell_key = f"{ma}|{tier}|{refl}|{treatment}"
+        out_cells[cell_key] = {
+            "model": ma, "tier": tier, "refl": refl, "treatment": treatment, "n": n,
+            "coop_rate": cell_stats(coops),
+            "coop_collapsed_count": n_collapsed,
+            "coop_collapsed_ci": [round(100 * x, 1) for x in wilson_ci(n_collapsed, n)],
+        }
+        # Welch t vs vanilla baseline
+        base = baseline.get((ma, tier, refl), [])
+        if len(base) >= 2 and n >= 2:
+            wt = welch_t(coops, base)
+            out_compare[cell_key] = (wt or {}) | {
+                "treatment_n": n,
+                "treatment_mean": round(statistics.mean(coops), 2),
+                "baseline_n": len(base),
+                "baseline_mean": round(statistics.mean(base), 2),
+                "delta": round(statistics.mean(coops) - statistics.mean(base), 2),
+            }
+    return {
+        "n_tier3_runs": sum(c["n"] for c in out_cells.values()),
+        "tier3_cells": out_cells,
+        "tier3_vs_baseline": out_compare,
+    }
+
+
 # ----- Pre-baked comparison list -----
 
 COMPARISON_PAIRS = [
@@ -469,6 +550,7 @@ def main() -> None:
         "fisher_2x2_comparisons": fisher_comparisons(runs, COMPARISON_PAIRS),
         "sonnet_concealed_defection_audit": sonnet_concealed_defection_audit(),
         "matchup_analysis": matchup_analysis(),
+        "tier3_analysis": tier3_analysis(),
     }
 
     if args.json:
@@ -525,6 +607,19 @@ def main() -> None:
     for key, c in sorted(ma["cross_baseline_comparisons"].items()):
         if "p" not in c: continue
         print(f"  {key}: matchup_mean={c['matchup_mean']}%  single_mean={c['single_mean']}%  "
+              f"Δ={c['delta']:+.1f}  t={c.get('t')}  p={c.get('p')}")
+    print()
+    t3 = report["tier3_analysis"]
+    print(f"--- Tier 3 single-axis interventions (n_tier3_runs={t3['n_tier3_runs']}) ---")
+    for key, c in sorted(t3["tier3_cells"].items()):
+        cr = c["coop_rate"]
+        print(f"  {c['model'][:25]:25s} {c['tier']} {c['refl']:3s} {c['treatment']:8s} "
+              f"n={c['n']}  mean={cr['mean']}%  CI=[{cr['ci_low']}, {cr['ci_high']}]  "
+              f"collapsed={c['coop_collapsed_count']}/{c['n']}")
+    print("  --- vs vanilla baseline (Welch t) ---")
+    for key, c in sorted(t3["tier3_vs_baseline"].items()):
+        if "p" not in c: continue
+        print(f"  {key}: treatment={c['treatment_mean']}%  baseline={c['baseline_mean']}%  "
               f"Δ={c['delta']:+.1f}  t={c.get('t')}  p={c.get('p')}")
     print()
 
