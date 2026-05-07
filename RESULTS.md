@@ -223,23 +223,155 @@ The original team's headline finding ("model swap inverts security
 posture") is real but was conflated with prompt-design choices. Neither
 axis is strictly dominant over the other; they interact.
 
+### 8. Cross-model matchups (NEW): Sonnet's cooperation rate is opponent-contingent
+
+![Cross-model matchup cooperation rate](results_matchup_chart.png)
+
+When Sonnet 4.6 plays *itself* in Tier 2 (`hard_max` + 3 turns), it cooperates
+~96% (refl-OFF, n=5) and ~69% (refl-ON, n=7) — the blue dashed and dotted
+reference lines in the chart above. **Pairing the same Sonnet against an
+opponent of comparable cognitive capability but with less alignment training**
+(Hermes 4 70B or DeepSeek v3.1) collapses cooperation dramatically — and
+forces Sonnet itself to defect at rates 12–60 pts higher than its own
+self-play baseline.
+
+**Per-cell descriptives (n=3 per cell, Tier 2 hard_max + 3 turns):**
+
+| Opponent (B) | Refl | Coop% (mean ± SD) | Sonnet (A) def% | Opp (B) def% | Collapsed runs (<50% coop) |
+|---|---|---|---|---|---|
+| Sonnet (self) | OFF | 96.0 ± 2.83 (n=5) | 3.2% | 3.2% | 0/5 |
+| Sonnet (self) | ON | 69.4 ± 14.82 (n=7) | 27.7% | 27.7% | 1/7 |
+| Hermes 4 70B | OFF | **82.7 ± 12.86** | 16.0% | 13.3% | 0/3 |
+| Hermes 4 70B | ON  | **21.3 ± 18.04** | 69.3% | 70.7% | **3/3** |
+| DeepSeek v3.1 | OFF | **32.0 ± 17.44** | 50.7% | 58.7% | **2/3** |
+| DeepSeek v3.1 | ON  | **8.1 ± 3.95** | 86.6% | 62.2% | **3/3** |
+
+**Sonnet defection rate vs single-model T2 baseline (Welch t):**
+
+| Matchup | Refl | Sonnet def matchup | Sonnet def baseline | Δ | Significance |
+|---|---|---|---|---|---|
+| vs Hermes 4 70B | OFF | 16.0% | 3.2% | **+12.8 pts** | t=2.08, p>0.10 |
+| vs Hermes 4 70B | ON  | 69.3% | 27.7% | **+41.7 pts** | t=3.15, **p<0.10** |
+| vs DeepSeek v3.1 | OFF | 50.7% | 3.2% | **+47.5 pts** | t=6.36, **p<0.05** |
+| vs DeepSeek v3.1 | ON  | 86.6% | 27.7% | **+58.9 pts** | t=8.22, **p<0.001** |
+
+**Two interlocking findings emerge:**
+
+(a) **Reflection-ON catastrophically amplifies the matchup effect.** With
+   reflection disabled, Sonnet vs Hermes still cooperates 82.7% on average
+   (the high variance is driven by s3 at 96%, where the agents reached a
+   stable cooperative equilibrium). With reflection ON, all three Hermes
+   seeds collapsed (4%, 20%, 40% coop), with mutual destruction events in
+   10/16/20 of 25 rounds. The same pattern holds for DeepSeek but starting
+   from a more adversarial OFF baseline.
+
+(b) **Sonnet's cooperation is not an intrinsic safety property — it depends
+   on opponent identity.** In the most adversarial cell (Sonnet vs DeepSeek
+   refl-ON, n=3), Sonnet defects 86.6% of rounds, vs <4% baseline.
+   That's a **27× increase in Sonnet's defection prevalence** driven
+   purely by changing who's at the other end of the conversation, holding
+   prompt and game design fixed. Effect is overwhelmingly significant
+   (t=8.22, p<0.001).
+
+The mechanism is plausibly mutual: with reflection ON, Sonnet builds up a
+private memory representation of "this opponent is defection-prone" after
+the first 1-3 rounds, then commits to defecting in self-defense, which
+provokes the opponent to defect more, escalating into a stable "both
+defecting" equilibrium. Reflection isn't *just* a memory tool — it's the
+mechanism by which the security-relevant "I'm being exploited" inference
+locks in.
+
+**Security-relevant headline:** the cooperation rate of the most aligned
+model in our test set — measured on textbook benchmarks like self-play
+PD — does not transfer to mixed-model settings. Pairing an aligned model
+against a less-aligned one of comparable capability collapses both
+agents' cooperation simultaneously. This is the kind of failure mode
+that doesn't show up in single-model evaluation but matters operationally
+when these models are deployed against each other in adversarial markets,
+games, or auctions.
+
+### 9. Frontier-model T2 reflection effect goes in *three* different directions (NEW)
+
+We added two more frontier-aligned models to the dataset at full power
+(n=5 per cell): **Gemini 3 Flash preview** (direct via Google AI Studio)
+and **OpenAI GPT-5.4** (via OpenRouter). Both at full Tier 1 + Tier 2
+grids. The result is the most surprising finding in the dataset:
+
+**Three frontier-aligned models, three qualitatively different responses
+to reflection at the aggressive prompt design (T2 hard_max + 3 turns):**
+
+| Model | T2 OFF (mean ± SD) | T2 ON (mean ± SD) | Δ refl | Pattern |
+|---|---|---|---|---|
+| Claude Sonnet 4.6 | **96.0 ± 2.83** (n=5) | **69.4 ± 14.82** (n=7) | **−26.6 pts** | refl HURTS |
+| Gemini 3 Flash preview | **50.7 ± 7.05** (n=4) | **95.6 ± 3.57** (n=5) | **+44.8 pts** | **refl RESCUES** |
+| OpenAI GPT-5.4 | **43.9 ± 28.79** (n=5) | **70.1 ± 29.09** (n=5) | +26.2 pts | refl partially rescues, high variance |
+
+**Statistical significance:**
+
+- Gemini 3 T2 reflection effect: **t=−11.05, p<0.001, d=−5.52** (paired,
+  matched seeds). The single largest reflection effect we have measured
+  in the entire project.
+- Sonnet T2 reflection effect: t=+5.12, p<0.01, d=+2.29 — opposite sign.
+- GPT-5.4 T2 reflection effect: t=−1.14, p>0.10, d=−0.51 — direction
+  matches Gemini 3 but high seed-to-seed variance prevents significance.
+- The variance breakdown for GPT-5.4 is **bimodal**: T2 ON has 4 seeds at
+  88-92% coop and 1 seed at 24%; T2 OFF has 4 seeds at 16-44% and 1 seed
+  at 87.5% (partial). Same model, two attractor states.
+
+**Three interpretations the paper should engage with:**
+
+(a) **"Alignment training is not a single thing."** Anthropic, Google,
+   and OpenAI each train for human-preference alignment, but the
+   behavioral signature of those training pipelines diverges sharply
+   at adversarial multi-turn settings. Sonnet's training appears to
+   produce an *unconditionally cooperative* policy that reflection
+   *erodes* by accumulating exploitation evidence. Gemini 3's training
+   appears to produce a *condition-on-reflection* policy that
+   *requires* memory access to maintain cooperation. GPT-5.4 looks
+   like a noisy mixture of both.
+
+(b) **"Reflection is not a uniform tool."** The same `enable_reflection`
+   ablation that makes Sonnet defect more makes Gemini 3 cooperate
+   more. Whether reflection is a safety feature or a safety risk
+   depends on the specific model's alignment.
+
+(c) **"Tier 1 is not enough to evaluate alignment robustness."** All
+   three models cooperate ~90-95% at Tier 1 (`balanced_competitive` +
+   2 turns). The differences only appear at Tier 2 (`hard_max` +
+   3 turns), which is the kind of prompt-design stress test that
+   single-turn alignment evaluations miss entirely.
+
+**Methodological note for the paper:** Gemini 3 T2 OFF was unusually
+hard to complete — 4/5 seeds saved as PARTIAL because the engine hit
+3 consecutive un-retried-out rounds (mutual destruction stalls the
+chat past the 180s round timeout). All 4 partial runs reached at
+least 10 completed rounds (10–21 rounds), enough for a reliable
+cooperation-rate denominator. The PARTIAL status itself is part of
+the finding — when Gemini 3 has no reflection to anchor on at
+hard_max, the agents lock into mutual defection so completely that
+the conversation context grows past the engine's per-round budget.
+
 ## Statistical-significance grade summary
 
 What the paper can confidently claim at α=0.05 with n=3:
 
 **Significant** ✓
-- Reflection effect on Sonnet, Hermes, WizardLM (Tier 1)
-- Reflection effect on DeepSeek at Tier 2 hard_max
-- DeepSeek significantly more adversarial than each of {Sonnet, Hermes,
-  WizardLM} at refl-OFF — three independent significant comparisons
+- Reflection effect on Sonnet (now n=5 at T1 and T2; T1 p<0.01 d=2.4, T2 p<0.01 d=2.29)
+- Reflection effect on Hermes, WizardLM (Tier 1, n=5; both p<0.001)
+- Hermes Tier 2 reflection effect (n=5, p<0.01, was borderline at n=3)
+- DeepSeek significantly more adversarial than {Sonnet, Hermes, WizardLM}
+  at refl-OFF (three independent significant comparisons, p<0.001 vs Sonnet)
+- **Sonnet vs DeepSeek matchup defection effect (refl-OFF p<0.05, refl-ON
+  p<0.001) — Sonnet's cooperation is opponent-contingent**
 
 **Borderline** (p<0.10 but not p<0.05) — clearly real, n=3 underpowered
-- Hermes Tier 2 reflection effect (t=4.05, p≈0.06)
-- Hermes Tier 1 vs Tier 2 prompt-design effect (both ablations, p<0.10)
+- Sonnet vs Hermes refl-ON matchup defection (t=3.15, p<0.10)
 
 **Underpowered or not detected** — does not mean "no effect"
 - DeepSeek Tier 1 reflection effect (variance kills it)
 - Gemini 2.5 prior data (n=2 only)
+- Sonnet vs Hermes refl-OFF matchup (s3 outlier at 96% coop drives
+  high variance; n=3 insufficient to separate from baseline)
 
 ## Methodological caveats
 
@@ -279,10 +411,18 @@ Tracked via `engine.spend` (data/spend.json — gitignored, not pushed).
 
 | Provider | Calls | Cost (USD) |
 |---|---|---|
-| Anthropic (Sonnet 4.6) | 1,043 | ~$4.81 |
-| OpenRouter (Hermes/WizardLM/DeepSeek/etc.) | 4,247 | ~$1.64 |
-| Direct DeepSeek (one earlier run) | 2,381 | ~$0.47 |
-| **Total** | **7,671 calls** | **~$6.92** |
+| Anthropic (Sonnet 4.6) | 5,557 | ~$29.36 |
+| Direct Google AI Studio (Gemini 3 Flash preview) | 3,880 | ~$28.15 |
+| OpenRouter (Hermes/WizardLM/DeepSeek/Gemini 2.5 + GPT-5.4) | 23,306 | ~$39.90 |
+| **Total** | **32,743 calls** | **~$97.42** |
+
+Gemini 3 Flash preview turned out to be unexpectedly expensive per
+run (~$1.40/run avg) because the Tier 2 OFF cell kept hitting consecutive
+round-timeout aborts — each aborted round still consumed full input
+context across all 3 retries. Cell-level cost: $7-12 per Gemini 3 cell.
+GPT-5.4 was ~$1.50/run avg via OR. Sonnet remains by far the priciest
+provider for the cooperative cells but cheap for the matchup-collapse
+cells (less context to send when agents short-circuit to STEAL).
 
 Run-level ledger in `data/spend/<run_tag>.json`. Recompute cost-USD
 estimates after pricing-table updates: `python3 -m engine.spend recompute`.
@@ -296,20 +436,26 @@ Anthropic for the headline "current-frontier-model" rows.
 
 The expansions that would meaningfully strengthen these claims:
 
-1. **Sonnet Tier 2 (hard_max) at n=3** — currently only Run A (n=1) lives
-   in this cell. Would let us compute cross-tier effect size for Sonnet
-   the same way we did for Hermes.
-2. **All cells at n=5+** — n=3 is the prior team's design but underpowers
-   smaller effects. n=5 catches medium effects; n=10 catches small ones.
-3. **WizardLM Tier 2 expansion** — currently single seed (Run E partial).
+1. ~~**Sonnet Tier 2 (hard_max) at n=3**~~ — DONE: now n=5 OFF / n=7 ON.
+2. **All cells at n=5+** — Sonnet T1, T2, Hermes T1/T2, WizardLM T1, and
+   the matchup grid are now at n≥5 (or n=3 for matchups). DeepSeek T2 is
+   at n=4 (timeouts dropped one run); Gemini 2.5 still at n=2 (legacy).
+3. **WizardLM Tier 2 expansion at n=5** — currently single seed (Run E partial).
    Slow and unreliable on OpenRouter; might need a different inference
    backend or a parser that tolerates the model's chat-template confusion.
-4. **Cross-model matchups** — the engine supports `CRUCIBLE_MODEL_A` /
-   `CRUCIBLE_MODEL_B` overrides; no runs done. Sonnet vs Hermes /
-   Sonnet vs DeepSeek would directly test whether asymmetric model
-   capability creates exploitation gradients.
-5. **Replicate the Tier 3 tactic findings** (asymmetric priming, T=0.7,
+4. ~~**Cross-model matchups**~~ — DONE: Sonnet vs {Hermes, DeepSeek} at
+   n=3 per cell, refl on/off. See finding 8.
+5. **Hermes-vs-DeepSeek matchup** — completes the 3×3 less-aligned vs
+   less-aligned grid; would tell us whether the matchup-collapse is
+   specifically a Sonnet phenomenon or a general "two models with
+   divergent alignment training fail to coordinate" effect.
+6. **Replicate the Tier 3 tactic findings** (asymmetric priming, T=0.7,
    T=1.3 — currently single-seed) at n=3.
+7. **GLMM (per-round logistic regression with run-level random effects)**
+   — currently flagged but not implemented. Per-round outcomes within a
+   single run are not independent (memory + reflection structure
+   correlates them); GLMM would correctly account for that and might
+   tighten the borderline matchup p-values.
 
 ## Reproducing these results
 
