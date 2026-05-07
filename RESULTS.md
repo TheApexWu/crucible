@@ -58,6 +58,159 @@ For full prompt content + engine details see
 [`shared/models.py`](shared/models.py) and the original
 [CRUCIBLE README](README.md).
 
+## Comprehensive results overview
+
+Every cell, every ablation, every significance test in one place. All
+numbers reproducible via `python3 scripts/statistical_analysis.py`.
+**127 runs** in primary analysis (single-model + matchups, vanilla T1/T2);
+**20 additional runs** in Tier-3 interventions; **430 STEAL events**
+classified in the Sonnet concealed-defection audit.
+
+### Per-cell descriptives (continuous: cooperation rate %)
+
+| Model | Tier | Refl | n | Mean | SD | 95% CI |
+|---|---|---|---|---|---|---|
+| **Sonnet 4.6** | T1 | OFF | 5 | 96.8 | 3.35 | [92.65, 100.95] |
+| Sonnet 4.6 | T1 | ON | 5 | 91.06 | 1.74 | [88.9, 93.22] |
+| Sonnet 4.6 | T2 | OFF | 5 | **96.0** | 2.83 | [92.49, 99.51] |
+| Sonnet 4.6 | T2 | ON | 7 | **69.42** | 14.82 | [55.71, 83.12] |
+| **Gemini 3 Flash preview** | T1 | OFF | 5 | 92.7 | 5.33 | [86.08, 99.32] |
+| Gemini 3 Flash preview | T1 | ON | 5 | 93.6 | 3.58 | [89.16, 98.04] |
+| Gemini 3 Flash preview | T2 | OFF | 4¹ | **50.71** | 7.05 | [39.5, 61.93] |
+| Gemini 3 Flash preview | T2 | ON | 5 | **95.57** | 3.57 | [91.13, 100.0] |
+| **GPT-5.4** | T1 | OFF | 5 | 90.4 | 4.56 | [84.74, 96.06] |
+| GPT-5.4 | T1 | ON | 5 | 94.4 | 3.58 | [89.96, 98.84] |
+| GPT-5.4 | T2 | OFF | 5 | **43.9** | 28.79 | [8.15, 79.65] |
+| GPT-5.4 | T2 | ON | 5 | **70.07** | 29.09 | [33.96, 106.18] |
+| **Hermes 4 70B** | T1 | OFF | 5 | 90.4 | 6.07 | [82.87, 97.93] |
+| Hermes 4 70B | T1 | ON | 5 | 49.6 | 10.43 | [36.65, 62.55] |
+| Hermes 4 70B | T2 | OFF | 5 | 55.2 | 14.81 | [36.82, 73.58] |
+| Hermes 4 70B | T2 | ON | 6 | 19.33 | 11.15 | [7.63, 31.03] |
+| **WizardLM-2 8x22B** | T1 | OFF | 5 | 87.17 | 7.65 | [77.67, 96.66] |
+| WizardLM-2 8x22B | T1 | ON | 5 | 45.67 | 9.18 | [34.27, 57.06] |
+| WizardLM-2 8x22B | T2 | OFF | 5 | 44.0 | 11.66 | [29.52, 58.48] |
+| WizardLM-2 8x22B | T2 | ON | 5 | 42.4 | 23.43 | [13.32, 71.48] |
+| **DeepSeek v3.1** | T1 | OFF | 5 | 53.93 | 16.23 | [33.78, 74.09] |
+| DeepSeek v3.1 | T1 | ON | 5 | 53.09 | 41.4 | [1.7, 104.49] |
+| DeepSeek v3.1 | T2 | OFF | 5 | 25.65 | 6.49 | [17.59, 33.7] |
+| DeepSeek v3.1 | T2 | ON | 6 | 26.55 | 21.19 | [4.31, 48.79] |
+| **Gemini 2.5 Flash (legacy)** | T1 | OFF | 2 | 52.0 | 33.94 | unreliable, n=2 |
+| Gemini 2.5 Flash (legacy) | T1 | ON | 2 | 22.0 | 19.8 | unreliable, n=2 |
+
+¹ Gemini 3 T2 OFF: 4/5 PARTIAL ≥10 rounds, 1 dropped (9 rounds).
+
+### Reflection effect within model+tier (paired-t)
+
+Δ = mean(OFF) − mean(ON). **Positive = reflection HURTS. Negative = reflection HELPS.**
+
+| Model | Tier | Δ (pts) | t | df | p | Cohen's d | Direction |
+|---|---|---|---|---|---|---|---|
+| Sonnet 4.6 | T1 | +5.7 | 5.36 | 4 | **<0.01** | 2.40 | refl HURTS |
+| Sonnet 4.6 | T2 | +22.8 | 5.124 | 4 | **<0.01** | 2.29 | refl HURTS |
+| **Gemini 3 Flash** | **T2** | **−44.8** | **−11.05** | 3 | **<0.001** | **−5.52** | **refl RESCUES** ★ |
+| Gemini 3 Flash | T1 | −0.9 | −0.30 | 4 | >0.10 | −0.13 | none |
+| GPT-5.4 | T1 | −4.0 | −3.162 | 4 | **<0.05** | −1.41 | refl helps weakly |
+| GPT-5.4 | T2 | −26.2 | −1.141 | 4 | >0.10 | −0.51 | refl helps (high variance, bimodal) |
+| Hermes 4 70B | T1 | +40.8 | 7.323 | 4 | **<0.001** | 3.28 | refl HURTS |
+| Hermes 4 70B | T2 | +32.8 | 4.358 | 4 | **<0.01** | 1.95 | refl HURTS |
+| WizardLM-2 8x22B | T1 | +41.5 | 34.94 | 4 | **<0.001** | 15.62 | refl HURTS |
+| WizardLM-2 8x22B | T2 | +1.6 | 0.178 | 4 | >0.10 | 0.08 | none |
+| DeepSeek v3.1 | T1 | +0.8 | 0.063 | 4 | >0.10 | 0.03 | none |
+| DeepSeek v3.1 | T2 | −3.9 | −0.398 | 4 | >0.10 | −0.18 | none |
+
+★ = single largest reflection effect in the project.
+
+### Aggregate axis effects (Welch t over the entire pool)
+
+| Axis | Comparison | Mean A vs Mean B | t | df | p |
+|---|---|---|---|---|---|
+| **Tier (prompt design)** | T1 (n=64) vs T2 (n=63) | 75.66% vs 52.82% | **4.676** | 123 | **<0.001** |
+| Reflection | OFF (n=61) vs ON (n=66) | 68.65% vs 60.34% | 1.595 | 124 | <0.10 |
+| Model: Sonnet vs DeepSeek | n=10 vs n=9 | 96.4% vs 40.83% | **8.351** | 8 | **<0.001** |
+| Model: Sonnet vs WizardLM | n=10 vs n=10 | 96.4% vs 65.58% | 3.937 | 9 | **<0.01** |
+| Model: Sonnet vs Hermes | n=10 vs n=10 | 96.4% vs 72.8% | 3.455 | 9 | **<0.01** |
+| Model: Sonnet vs GPT-5.4 | n=10 vs n=10 | 96.4% vs 67.15% | 2.944 | 9 | **<0.05** |
+| Model: Sonnet vs Gemini 3 | n=10 vs n=9 | 96.4% vs 74.04% | 2.913 | 8 | **<0.05** |
+| Model: Sonnet vs Gemini 2.5 (legacy) | n=10 vs n=2 | 96.4% vs 52.0% | 1.849 | 1 | >0.10 (n=2) |
+
+### Fisher exact on `coop_collapsed` binary (run had <50% coop)
+
+| Comparison | A collapsed/n | B collapsed/n | Fisher p |
+|---|---|---|---|
+| Sonnet T2 OFF vs DeepSeek T2 OFF | 0/5 | 4/4 | **0.0079** |
+| Hermes T1 OFF vs T2 ON | 0/5 | 6/6 | **0.0022** |
+| Hermes T2 OFF vs T2 ON | 2/5 | 6/6 | 0.0606 |
+| Hermes T1 OFF vs T1 ON | 0/5 | 3/5 | 0.1667 |
+| WizardLM T1 OFF vs T1 ON | 0/5 | 3/5 | 0.1667 |
+| Sonnet T1 OFF vs DeepSeek T1 OFF | 0/5 | 2/5 | 0.4444 |
+| Sonnet T1 OFF vs T1 ON | 0/5 | 0/5 | 1.0 |
+| Sonnet T2 OFF vs T2 ON | 0/5 | 1/7 | 1.0 |
+
+### Cross-model matchups (T2 only, n=3 per cell)
+
+| Cell (Sonnet vs X) | Refl | n | Coop% | Sonnet (A) def % | Opp (B) def % | Coop_collapsed |
+|---|---|---|---|---|---|---|
+| vs Hermes 4 70B | OFF | 3 | 82.7% | 16.0% | 13.3% | 0/3 |
+| vs Hermes 4 70B | ON | 3 | 21.3% | 69.3% | 70.7% | **3/3** |
+| vs DeepSeek v3.1 | OFF | 3 | 32.0% | 50.7% | 58.7% | **2/3** |
+| vs DeepSeek v3.1 | ON | 3 | 8.06% | 86.6% | 62.2% | **3/3** |
+
+**Sonnet defection rate vs single-model T2 baseline (Welch t):**
+
+| Comparison | Δ Sonnet def | t | df | p |
+|---|---|---|---|---|
+| vs DeepSeek refl ON | **+58.9 pts** | **8.224** | 8 | **<0.001** |
+| vs DeepSeek refl OFF | +47.5 pts | 6.357 | 6 | **<0.05** |
+| vs Hermes refl ON | +41.7 pts | 3.153 | 8 | <0.10 |
+| vs Hermes refl OFF | +12.8 pts | 2.077 | 6 | >0.10 (high seed variance) |
+
+### Tier 3 single-axis interventions (Hermes only, T2 hard_max)
+
+| Cell | Refl | Treatment | n | Coop% | vs Baseline | Δ | t | p |
+|---|---|---|---|---|---|---|---|---|
+| Hermes | OFF | **T=0.7** | 3 | **93.33%** | 55.2% | **+38.1** | 5.342 | **<0.01** |
+| Hermes | OFF | T=1.3 | 3 | 53.33% | 55.2% | −1.9 | −0.249 | >0.10 |
+| Hermes | OFF | ASYM priming | 3 | 61.33% | 55.2% | +6.1 | 0.617 | >0.10 |
+| Hermes | ON | T=0.7 | 3 | 5.33% | 19.33% | **−14.0** | −2.952 | **<0.05** |
+| Hermes | ON | **T=1.3** | 4 | **40.0%** | 19.33% | **+20.7** | 3.003 | **<0.05** |
+| Hermes | ON | ASYM priming | 4 | 20.0% | 19.33% | +0.7 | 0.094 | >0.10 |
+
+The temperature × reflection interaction is the largest effect in
+Tier 3: low temperature (T=0.7) helps cooperation when reflection is
+off but **hurts** it when reflection is on; high temperature (T=1.3)
+shows the opposite pattern. Asymmetric priming had no significant
+effect either way at this n.
+
+### Sonnet concealed-defection audit (qualitative)
+
+Walk every Sonnet game, classify each STEAL event by what the agent's
+last public message announced (regex for `\bSPLIT\b` vs `\bSTEAL\b`):
+
+| Category | Count | % of all Sonnet STEAL events |
+|---|---|---|
+| **Concealed** (announced SPLIT, then chose STEAL) | **139** | **32.3%** |
+| Overt (announced STEAL, chose STEAL) | 263 | 61.2% |
+| No clear announcement | 28 | 6.5% |
+| **Total Sonnet STEAL events** | **430** | 100% |
+
+Robust descriptive finding: Sonnet defects "deceptively" (announces
+cooperation, then defects) on roughly 1 in 3 of its defections.
+
+### Headline conclusions and their statistical backing
+
+| Conclusion | Where in RESULTS | Backing test | Significance |
+|---|---|---|---|
+| Reflection-on/off effect on Hermes/WizardLM Tier 1 | §1 | Paired t | **p<0.001** both, d=3.28 / 15.62 |
+| Sonnet shares the direction at smaller magnitude | §1, §2 | Paired t T1/T2 | **p<0.01** both, d=2.40 / 2.29 |
+| **Frontier-divergence: Gemini 3 reflection direction is opposite Sonnet** | §9 | Paired t | **p<0.001, d=−5.52** (largest in project) |
+| Tier (prompt design) dominates aggregate variance | §7 | Welch t on T1 vs T2 pool | **p<0.001** |
+| Sonnet > every other model in cooperation | §3, §4 | Welch t pairwise | <0.05 to **<0.001** |
+| Sonnet's cooperation collapses in mixed matchups (vs DeepSeek refl-ON) | §8 | Welch t cross-baseline | **p<0.001** |
+| Sonnet defects deceptively 1/3 of the time when it defects | §2 | Audit, n=430 events | Descriptive (no test) |
+| DeepSeek > all aligned models in `coop_collapsed` | §3 | Fisher exact | **<0.01** vs Sonnet |
+| Temperature × reflection interaction (Hermes T2) | §6 | Welch t vs baseline | **<0.05** both ON cells |
+| Asymmetric priming on Hermes | §6 | Welch t vs baseline | >0.10 (no detectable effect at n=3) |
+
 ## Headline findings
 
 ### 1. Reflection-on/off is the dominant single lever in Tier 1
