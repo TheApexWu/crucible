@@ -72,10 +72,10 @@ print('Figure 1: interaction effect (discrete cells)')
 # ============================================================
 fig, ax = plt.subplots(figsize=(6, 3.8))
 
-models = ['Gemini\n2.5 Flash', 'DeepSeek\nv3.1', 'DeepSeek\nV4 Flash', 'Hermes\n70B', 'Sonnet\n4.6', 'GPT-5.5']
-refl_on =  [15, 33, 48, 45, 80, 92]
-refl_off = [55, 47, 92, 91, None, 94]
-safety =   ['Medium', 'Opaque', 'Opaque', 'Light', 'Heavy', 'Heavy']
+models = ['Gemini\n2.5 Flash', 'Flash-\nLite', 'DeepSeek\nv3.1', 'DeepSeek\nV4 Flash', 'Hermes\n70B', 'Sonnet\n4.6', 'GPT-5.5']
+refl_on =  [15, 54, 53, 48, 50, 90, 92]
+refl_off = [55, 90, 54, 92, 90, 97, 94]
+safety =   ['Medium', 'Medium', 'Opaque', 'Opaque', 'Light', 'Heavy', 'Heavy']
 
 x = np.arange(len(models))
 width = 0.35
@@ -102,10 +102,7 @@ for i, (bar, val) in enumerate(zip(bars_on, refl_on)):
         ax.text(bar.get_x() + bar.get_width()/2, val + 1.5, f'{val}%',
                 ha='center', va='bottom', fontsize=7, fontweight='bold', color='#c22030')
 
-# Missing data annotation for Sonnet OFF
-sonnet_idx = 4
-ax.text(x[sonnet_idx] - width/2, 3, 'N/A', ha='center', va='bottom',
-        fontsize=6, color='#aaa', fontstyle='italic')
+# No missing data -- all models now have paired ON/OFF
 
 ax.set_ylabel('Cooperation Rate (%)')
 ax.set_xticks(x)

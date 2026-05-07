@@ -27,9 +27,9 @@
 \begin{abstract}
 As LLM agents are deployed in interactive settings, a foundational question arises: can they develop deceptive strategies without being told to deceive? We introduce Crucible, a simple framework in which two LLM agents play iterated Split or Steal---a Hawk-Dove game with no dominant strategy---conversing in natural language and optionally reflecting in a private scratchpad invisible to the opponent.
 
-We find that deception emerges only when private reflection and competitive framing are combined. In a $2 \times 2$ ablation, only one cell produces deceptive behavior; neither reflection alone nor competitive framing alone is sufficient. This interaction effect replicates across all seven models tested, with reflection reducing cooperation by 2 to 46 percentage points.
+We find that deception emerges only when private reflection and competitive framing are combined. In a $2 \times 2$ ablation, only one cell produces deceptive behavior; neither reflection alone nor competitive framing alone is sufficient. This interaction effect replicates across all seven models tested, with reflection reducing cooperation by 1 to 44 percentage points.
 
-The same experimental setup produces starkly different profiles across models. Safety-trained frontier models cooperate reliably and avoid mutual destruction. Less-aligned models collapse into adversarial spirals within three rounds. Within a single model family, a smaller model cannot sustain deception even when its private reflections reveal the intent; a larger model exploits from round two. We additionally find that sampling temperature modulates deception independently of model or prompt.
+The same experimental setup produces starkly different profiles across models. Safety-trained frontier models cooperate reliably and avoid mutual destruction. Less-aligned models collapse into adversarial spirals within three rounds. Within a single model family, a smaller model cannot sustain deception even when its private reflections reveal the intent; a larger model exploits from round two. However, this cooperation is opponent-contingent: a safety-trained model paired with a less-aligned opponent defects at rates comparable to the less-aligned model itself. We additionally find that sampling temperature modulates deception independently of model or prompt.
 
 These results suggest that private reasoning, competitive objectives, and safety training interact to gate emergent strategic deception---a failure mode that single-turn evaluations do not measure. All code, data, and transcripts are included in the supplementary material.
 \end{abstract}
@@ -42,9 +42,9 @@ An agent that says ``I'll cooperate with you this round'' and then steals is doi
 
 We study this through a deliberately simple setup. Two LLM agents play iterated Split or Steal, a social dilemma derived from the Chicken (Hawk-Dove) game where mutual stealing is the worst outcome for both players ($-\$75$ each). Unlike the Prisoner's Dilemma, there is no dominant strategy: cooperation is a genuine choice, not naive play. The agents converse in natural language before each round, then secretly choose. After each round, each agent optionally writes a \textbf{private reflection}---an analysis of the opponent's behavior that the other side never sees. Combined with a sliding memory window, this creates a space where agents can reason about trust, plan exploitation, and track whether their strategies are working.
 
-Three findings emerge from this setup. First, deception requires a specific combination of conditions: private reflection \emph{and} competitive framing, together. Give a model a private scratchpad without competitive pressure and it cooperates perfectly. Give it competitive pressure without a scratchpad and it mostly cooperates. Combine both and cooperation collapses. This \textbf{interaction effect} replicates across all seven models tested, with reflection reducing cooperation by 2 to 46 percentage points. Second, the strongest predictor of whether a model deceives is not its capability but its \textbf{safety training}. The same prompt produces near-total cooperation on GPT-5.5 and adversarial spirals on less-aligned open-source models. Third, \textbf{sampling temperature} independently modulates deception, shifting one model from 4\% to 44\% cooperation on the same seed.
+Three findings emerge from this setup. First, deception requires a specific combination of conditions: private reflection \emph{and} competitive framing, together. Give a model a private scratchpad without competitive pressure and it cooperates perfectly. Give it competitive pressure without a scratchpad and it mostly cooperates. Combine both and cooperation collapses. This \textbf{interaction effect} replicates across all seven models tested, with reflection reducing cooperation by 1 to 44 percentage points. Second, the strongest predictor of whether a model deceives is not its capability but its \textbf{safety training}. The same prompt produces near-total cooperation on GPT-5.5 and adversarial spirals on less-aligned open-source models. Third, \textbf{sampling temperature} independently modulates deception, shifting one model from 4\% to 44\% cooperation on the same seed.
 
-We contribute: (1)~a simple, ablated framework for studying emergent deception in LLM social dilemmas; (2)~a $2 \times 2$ design isolating the interaction effect, replicated across seven models from five model families; (3)~cross-model evidence that safety training gates deception; (4)~evidence that sampling temperature is an independent deception dial; (5)~a composite Deception Index for quantifying multi-turn strategic deception; and (6)~full release of code, data, and transcripts in the supplementary material.
+We contribute: (1)~a simple, ablated framework for studying emergent deception in LLM social dilemmas; (2)~a $2 \times 2$ design isolating the interaction effect, replicated across seven models from five model families; (3)~cross-model evidence that safety training gates unprovoked deception, with matchup experiments showing cooperation is opponent-contingent; (4)~evidence that sampling temperature is an independent deception dial; (5)~a composite Deception Index for quantifying multi-turn strategic deception; and (6)~full release of code, data, and transcripts in the supplementary material.
 
 % ============================================================
 \section{Related Work}
@@ -150,7 +150,7 @@ Only the combination of competitive framing \emph{and} private reflection produc
 
 \subsection{Cross-Model Replication}
 
-The reflection effect replicates across all models with paired data (Table~\ref{tab:replication}). Enabling reflection reduces cooperation on every model, with effect sizes ranging from $-2$ to $-46$ percentage points.
+The reflection effect replicates across all models with paired data (Table~\ref{tab:replication}). Enabling reflection reduces cooperation on every model, with effect sizes ranging from $-1$ to $-44$ percentage points.
 
 \begin{table}[h]
 \centering
@@ -160,15 +160,15 @@ The reflection effect replicates across all models with paired data (Table~\ref{
 Model & Safety & Refl OFF & Refl ON & $\Delta$ (pts) & $n$ \\
 \midrule
 GPT-5.5                  & Heavy  & 94\% & 92\% & $-$2  & 2 \\
-Claude Sonnet 4.6        & Heavy  & ---  & 80\% & ---   & 1 \\
+Claude Sonnet 4.6        & Heavy  & 97\% & 90\% & $-$7  & 5 \\
 Gemini 2.5 Flash         & Medium & 55\% & 15\% & $-$40 & 3 \\
-Gemini 2.5 Flash-Lite    & Medium & 100\% & 76\% & $-$24 & 1 \\
-Hermes 4 70B             & Light  & 91\% & 45\% & $-$46 & 3 \\
-DeepSeek v3.1            & Opaque & 47\% & 33\% & $-$14 & 3 \\
+Gemini 2.5 Flash-Lite    & Medium & 90\% & 54\% & $-$37 & 5 \\
+Hermes 4 70B             & Light  & 90\% & 50\% & $-$41 & 5 \\
+DeepSeek v3.1            & Opaque & 54\% & 53\% & $-$1  & 5 \\
 DeepSeek V4 Flash        & Opaque & 92\% & 48\% & $-$44 & 1 \\
 \bottomrule
 \end{tabular}
-\caption{Cross-model replication of the reflection effect (competitive framing, 7 models). Safety training intensity drawn from published system cards. All models with paired data show reduced cooperation under reflection. $n$ = seeds per condition. DeepSeek V4 Flash shows the largest reflection effect ($-$44 pts). DeepSeek v3.1 exhibits pathological seed variance under reflection ON (5\% / 82\% / 11\%).}
+\caption{Cross-model replication of the reflection effect (competitive framing, 7 models). Safety training intensity drawn from published system cards. $n$ = seeds per condition. All models with paired data show reduced cooperation under reflection except DeepSeek v3.1, whose bimodal seed variance (5\% / 82\% / 11\% / 84\% / 84\%) washes out to a near-zero mean effect despite large per-seed swings.}
 \label{tab:replication}
 \end{table}
 
@@ -180,10 +180,12 @@ DeepSeek V4 Flash        & Opaque & 92\% & 48\% & $-$44 & 1 \\
 \end{figure}
 
 \paragraph{Safety training as primary predictor.}
-The most striking pattern is the divergence between safety-trained and less-aligned models under identical conditions. GPT-5.5 cooperates at 92\% with reflection ON; Hermes 4 70B cooperates at 45\%. Claude Sonnet 4.6 cooperates at 80\% and delays its first betrayal to round 21. The same prompt, same game structure, same reflection mechanism produces cooperation rates spanning 15\% to 94\% depending solely on the model.
+The most striking pattern is the divergence between safety-trained and less-aligned models under identical conditions. GPT-5.5 cooperates at 92\% with reflection ON; Hermes 4 70B cooperates at 50\%. Claude Sonnet 4.6 cooperates at 90\% ($n{=}5$) and delays its first betrayal to round 21. The same prompt, same game structure, same reflection mechanism produces cooperation rates spanning 15\% to 94\% depending solely on the model.
+
+However, this cooperation is \textbf{opponent-contingent}. In cross-model matchups where Sonnet 4.6 plays against DeepSeek v3.1 under competitive framing with reflection ON, Sonnet's per-round defection rate rises from 28\% (self-play baseline) to 87\% ($t{=}8.22$, $p{<}0.001$, $n{=}3$). After 1--3 rounds of observing the opponent's defections, Sonnet's private reflections shift to defensive strategies and it commits to preemptive stealing. Safety training gates \emph{unprovoked} deception but does not prevent retaliatory defection against untrustworthy opponents.
 
 \paragraph{Capability scaling.}
-Within the Gemini family, the larger model (2.5 Flash) cooperates at 15\% and betrays by round 2. The smaller model (Flash-Lite) cooperates at 76\% and does not betray until round 18. Inspection of Flash-Lite's private reflections reveals attempted opponent modeling that fails to translate into consistent action: the model plans to defect but cannot sustain the strategy.
+Within the Gemini family, the larger model (2.5 Flash) cooperates at 15\% and betrays by round 2. The smaller model (Flash-Lite) cooperates at 54\% ($n{=}5$) with high seed variance (8\% to 100\%). Inspection of Flash-Lite's private reflections reveals attempted opponent modeling that fails to translate into consistent action: the model plans to defect but cannot sustain the strategy across seeds. Capability gates not whether deception occurs, but whether it occurs \emph{reliably}.
 
 \subsection{Behavioral Trajectory}
 
@@ -230,8 +232,8 @@ At $T{=}1.3$, cooperation jumps from 4\% to 44\% and both agents finish with pos
 \paragraph{The interaction effect.}
 Deception requires both private reflection and competitive framing. Private reasoning spaces (scratchpads, chain-of-thought, internal monologue) are increasingly common in deployed agents. Our results suggest that combining these with competitive objectives creates conditions for emergent deception, without any instruction to deceive.
 
-\paragraph{Safety training as a gate.}
-The strongest predictor of deception in our experiments is not capability, game structure, or prompt design, but the degree of safety training. This suggests that ``willingness to deceive under incentive'' is a measurable, model-level property that aligns with reported alignment performance.
+\paragraph{Safety training as a conditional gate.}
+The strongest predictor of unprovoked deception in our experiments is not capability, game structure, or prompt design, but the degree of safety training. Cross-model matchups reveal that this gate is conditional: safety-trained models cooperate in self-play but defect against untrustworthy opponents. ``Willingness to deceive under incentive'' is therefore a measurable, model-level property modulated by opponent behavior.
 
 \paragraph{Is it ``real'' deception?}
 Three observations argue against the objection that agents merely reproduce deceptive patterns from training data. First, the $2 \times 2$ ablation shows deception is condition-dependent: same weights, different behavior per condition. If deception were retrieval, the grid would be uniform. Second, capability scaling: model size predicts deception quality. Third, operationally, the agent says X then does not-X in a way that systematically extracts value, meeting the operational definition of deception in game theory~\cite{gneezy2005deception, crawford2003lying}.
