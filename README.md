@@ -4,7 +4,7 @@
 
 Two AI agents play 100 rounds of Split or Steal. Through private reflection and experience, they discover deception, trust manipulation, and counter-deception. Nothing is prompted. Everything emerges.
 
-> **Research paper (2026):** These findings were extended into *Crucible: Emergent Deception in LLM Social Dilemmas Through Private Reflection* (A. Wu, E. Correa, E. Celebi) — submitted to NeurIPS 2026, currently under review.
+> **Research paper (2026):** These findings were extended into *Crucible: Emergent Deception in LLM Social Dilemmas Through Private Reflection* (A. Wu, E. Correa, E. Celebi).
 
 ## What this is
 
