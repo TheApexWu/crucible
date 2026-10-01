@@ -1,5 +1,7 @@
 # CRUCIBLE -- Screen Recording Script (3 min)
 
+> Hackathon script from Feb 2026, kept as written. Two lines did not hold up: the Gemini 2.5 Flash runs' prompt was not recorded, so "same prompts" is unsupported, and the market figures are unsourced. See the README for the corrected findings.
+
 Screen recording only. No voiceover. Dashboard tells the story with on-screen text.
 
 Sponsors: Google Gemini 2.0 Flash (both agents), ElevenLabs (voice rendering), Datadog LLM Observability (tracing), Braintrust (structured eval).

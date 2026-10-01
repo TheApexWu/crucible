@@ -2,7 +2,7 @@
 Compare behavior between legacy and balanced competitive prompt modes.
 
 Usage:
-  venv/bin/python scripts/compare_prompt_modes.py --rounds 25 --turns 2
+  python scripts/compare_prompt_modes.py --rounds 25 --turns 2
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import argparse
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -21,7 +22,7 @@ OUT_DIR = DATA_DIR / "compare_prompt_modes"
 
 def _run_mode(mode: str, rounds: int, turns: int) -> dict:
     cmd = [
-        "venv/bin/python",
+        sys.executable,
         "-m",
         "engine.run",
         "--rounds",
