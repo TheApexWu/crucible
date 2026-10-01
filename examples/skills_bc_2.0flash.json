@@ -1,0 +1,399 @@
+{
+  "run_id": "b111dd4c81cf",
+  "domain": "fraud_ops",
+  "source_strategy_version": "v1",
+  "skills": [
+    {
+      "id": "adaptive_verification_escalation",
+      "title": "Adaptive Verification Escalation",
+      "intent": "Escalate verification depth quickly after repeated suspicious behavior.",
+      "customer_benefit": "Reduces fraudulent account actions while preserving transparent recovery paths.",
+      "trigger": {
+        "name": "high_retaliation_fast_response_endgame_aggression",
+        "condition": "retaliation_rate_after_betrayal >= 0.60 and mean_retaliation_latency <= 1.50 and endgame_steal_delta >= 0.20",
+        "thresholds": {
+          "retaliation_rate_after_betrayal": 0.6,
+          "mean_retaliation_latency": 1.5,
+          "endgame_steal_delta": 0.2
+        }
+      },
+      "policy": {
+        "allowed_moves": [
+          "step_up_verification",
+          "limited_access_until_verified",
+          "offer_human_review_path"
+        ],
+        "forbidden_moves": [
+          "silent_account_lock_without_reason",
+          "unexplained_denial"
+        ],
+        "response_style": "firm, transparent, evidence-based",
+        "risk_level": "high"
+      },
+      "when_to_use": [
+        "Repeated bypass attempts or suspicious escalation after warnings.",
+        "Late-session behavior shifts toward adversarial patterns."
+      ],
+      "when_not_to_use": [
+        "Routine low-risk tasks with no anomalous signals."
+      ],
+      "prompt_modules": {
+        "system_extension": "When risk spikes, require stronger verification before sensitive actions.",
+        "response_constraints": "State exactly why verification is required and what user can do next.",
+        "repair_playbook": "If user verifies successfully, restore access and summarize protections applied."
+      },
+      "kpis": [
+        "fraud_prevention_rate",
+        "false_positive_rate",
+        "verification_completion_rate",
+        "appeal_resolution_time"
+      ],
+      "evidence": [
+        "Winner A score: 900 vs 500.",
+        "Retaliation 1.00 vs contrast 1.00.",
+        "Endgame steal delta +0.30 vs contrast +0.35."
+      ],
+      "safety_notes": [
+        "Never disclose internal fraud heuristics that enable evasion.",
+        "Offer a legitimate remediation path to verified customers."
+      ],
+      "provenance": {
+        "source_agent": "A",
+        "contrast_agent": "B",
+        "metric_evidence": {
+          "winner_retaliation_rate": 1.0,
+          "winner_mean_retaliation_latency": 1.0,
+          "winner_endgame_steal_delta": 0.29999999999999993
+        },
+        "event_refs": [
+          "round_14_retaliation",
+          "round_81_endgame_shift",
+          "round_90_retaliation"
+        ],
+        "translation_notes": [
+          "High retaliation maps to stricter fraud controls.",
+          "Low latency maps to fast containment requirements."
+        ]
+      },
+      "confidence_score": 0.775,
+      "domain_context": "Fraud Ops escalation playbook for rapidly increasing risk confidence."
+    },
+    {
+      "id": "late_session_risk_tightening",
+      "title": "Late-Session Risk Tightening",
+      "intent": "Increase defensive controls in prolonged sessions with late adversarial shifts.",
+      "customer_benefit": "Limits fraud attempts that intensify after trust is established.",
+      "trigger": {
+        "name": "endgame_aggression_with_late_conflict",
+        "condition": "endgame_steal_delta >= 0.20 and late_phase_conflict_events >= 1",
+        "thresholds": {
+          "endgame_steal_delta": 0.2,
+          "late_phase_conflict_events": 1.0
+        }
+      },
+      "policy": {
+        "allowed_moves": [
+          "reconfirm_identity",
+          "restrict_sensitive_changes",
+          "force_secondary_review"
+        ],
+        "forbidden_moves": [
+          "continue_high_privilege_actions_without_recheck"
+        ],
+        "response_style": "guarded, explicit, procedural",
+        "risk_level": "high"
+      },
+      "when_to_use": [
+        "Session length is high and conflict indicators rise in final phase."
+      ],
+      "when_not_to_use": [
+        "Short low-risk sessions with no adversarial signals."
+      ],
+      "prompt_modules": {
+        "system_extension": "In late contentious sessions, re-evaluate risk before sensitive operations.",
+        "response_constraints": "Explain late-session rechecks as account protection measures.",
+        "repair_playbook": "Provide fastest compliant route to complete legitimate requests."
+      },
+      "kpis": [
+        "late_session_fraud_capture_rate",
+        "false_positive_rate",
+        "sensitive_action_block_rate",
+        "time_to_safe_resolution"
+      ],
+      "evidence": [
+        "Winner endgame steal delta +0.30; late conflict events 2."
+      ],
+      "safety_notes": [
+        "Never disclose internal fraud heuristics that enable evasion.",
+        "Offer a legitimate remediation path to verified customers."
+      ],
+      "provenance": {
+        "source_agent": "A",
+        "contrast_agent": "B",
+        "metric_evidence": {
+          "winner_endgame_steal_delta": 0.29999999999999993,
+          "late_phase_conflict_events": 2.0
+        },
+        "event_refs": [
+          "round_81_endgame_shift",
+          "round_90_retaliation"
+        ],
+        "translation_notes": [
+          "Late aggression spikes map to mandatory re-verification for sensitive actions."
+        ]
+      },
+      "confidence_score": 0.725,
+      "domain_context": "Fraud Ops late-session hardening policy."
+    }
+  ],
+  "policy_json": {
+    "mode": "advisory_manual_selection",
+    "domain": "fraud_ops",
+    "profile": {
+      "mode": "winner_contrast",
+      "winner_agent": "A",
+      "winner_score": 900.0,
+      "contrast_agent": "B",
+      "contrast_score": 500.0,
+      "score_delta": 400.0
+    },
+    "signal_quality": {
+      "is_sufficient": true,
+      "min_rounds_required": 20,
+      "rounds_observed": 100,
+      "min_key_events_required": 2,
+      "key_events_observed": 20,
+      "blocking_reasons": [],
+      "confidence": "high"
+    },
+    "available_skills": [
+      {
+        "id": "adaptive_verification_escalation",
+        "title": "Adaptive Verification Escalation",
+        "risk_level": "high",
+        "trigger": {
+          "name": "high_retaliation_fast_response_endgame_aggression",
+          "condition": "retaliation_rate_after_betrayal >= 0.60 and mean_retaliation_latency <= 1.50 and endgame_steal_delta >= 0.20",
+          "thresholds": {
+            "retaliation_rate_after_betrayal": 0.6,
+            "mean_retaliation_latency": 1.5,
+            "endgame_steal_delta": 0.2
+          }
+        },
+        "prompt_modules": {
+          "system_extension": "When risk spikes, require stronger verification before sensitive actions.",
+          "response_constraints": "State exactly why verification is required and what user can do next.",
+          "repair_playbook": "If user verifies successfully, restore access and summarize protections applied."
+        },
+        "constraints": {
+          "allowed_moves": [
+            "step_up_verification",
+            "limited_access_until_verified",
+            "offer_human_review_path"
+          ],
+          "forbidden_moves": [
+            "silent_account_lock_without_reason",
+            "unexplained_denial"
+          ]
+        },
+        "kpis": [
+          "fraud_prevention_rate",
+          "false_positive_rate",
+          "verification_completion_rate",
+          "appeal_resolution_time"
+        ],
+        "confidence_score": 0.775,
+        "provenance": {
+          "source_agent": "A",
+          "contrast_agent": "B",
+          "metric_evidence": {
+            "winner_retaliation_rate": 1.0,
+            "winner_mean_retaliation_latency": 1.0,
+            "winner_endgame_steal_delta": 0.29999999999999993
+          },
+          "event_refs": [
+            "round_14_retaliation",
+            "round_81_endgame_shift",
+            "round_90_retaliation"
+          ],
+          "translation_notes": [
+            "High retaliation maps to stricter fraud controls.",
+            "Low latency maps to fast containment requirements."
+          ]
+        }
+      },
+      {
+        "id": "late_session_risk_tightening",
+        "title": "Late-Session Risk Tightening",
+        "risk_level": "high",
+        "trigger": {
+          "name": "endgame_aggression_with_late_conflict",
+          "condition": "endgame_steal_delta >= 0.20 and late_phase_conflict_events >= 1",
+          "thresholds": {
+            "endgame_steal_delta": 0.2,
+            "late_phase_conflict_events": 1.0
+          }
+        },
+        "prompt_modules": {
+          "system_extension": "In late contentious sessions, re-evaluate risk before sensitive operations.",
+          "response_constraints": "Explain late-session rechecks as account protection measures.",
+          "repair_playbook": "Provide fastest compliant route to complete legitimate requests."
+        },
+        "constraints": {
+          "allowed_moves": [
+            "reconfirm_identity",
+            "restrict_sensitive_changes",
+            "force_secondary_review"
+          ],
+          "forbidden_moves": [
+            "continue_high_privilege_actions_without_recheck"
+          ]
+        },
+        "kpis": [
+          "late_session_fraud_capture_rate",
+          "false_positive_rate",
+          "sensitive_action_block_rate",
+          "time_to_safe_resolution"
+        ],
+        "confidence_score": 0.725,
+        "provenance": {
+          "source_agent": "A",
+          "contrast_agent": "B",
+          "metric_evidence": {
+            "winner_endgame_steal_delta": 0.29999999999999993,
+            "late_phase_conflict_events": 2.0
+          },
+          "event_refs": [
+            "round_81_endgame_shift",
+            "round_90_retaliation"
+          ],
+          "translation_notes": [
+            "Late aggression spikes map to mandatory re-verification for sensitive actions."
+          ]
+        }
+      }
+    ],
+    "global_constraints": [
+      "Never enable account takeover, fraud, or policy circumvention.",
+      "Require transparent verification steps before sensitive actions.",
+      "Prefer de-escalation and recovery path for legitimate users."
+    ]
+  },
+  "gating_checks": [
+    "PASS adaptive_verification_escalation: lint clean",
+    "PASS late_session_risk_tightening: lint clean",
+    "WARN LLM refinement skipped/fallback: skipped_missing_gemini_api_key"
+  ],
+  "approved": false,
+  "audit": {
+    "source_run_hash": "b111dd4c81cf6fb3c92acc9f151225db1fa004154f4bf855afc3591faf9db762",
+    "source_metrics_snapshot": {
+      "version": "v1",
+      "agents": [
+        {
+          "agent": "A",
+          "primary_label": "Unconditional Defector",
+          "split_rate": 0.08,
+          "retaliation_rate_after_betrayal": 1.0,
+          "forgiveness_rate_after_retaliation": 0.0,
+          "choice_match_prev_opponent_rate": 0.8888888888888888,
+          "endgame_steal_delta": 0.29999999999999993
+        },
+        {
+          "agent": "B",
+          "primary_label": "Unconditional Defector",
+          "split_rate": 0.12,
+          "retaliation_rate_after_betrayal": 1.0,
+          "forgiveness_rate_after_retaliation": 0.3333333333333333,
+          "choice_match_prev_opponent_rate": 0.9090909090909091,
+          "endgame_steal_delta": 0.35
+        }
+      ],
+      "event_count": 22
+    },
+    "lint_checks": [
+      "PASS adaptive_verification_escalation: lint clean",
+      "PASS late_session_risk_tightening: lint clean"
+    ],
+    "reviewer_decision": "pending",
+    "llm_refined": false,
+    "llm_model": "gemini-2.5-flash",
+    "llm_status": "skipped_missing_gemini_api_key",
+    "llm_diff_summary": []
+  },
+  "profile": {
+    "mode": "winner_contrast",
+    "winner_agent": "A",
+    "winner_score": 900.0,
+    "contrast_agent": "B",
+    "contrast_score": 500.0,
+    "score_delta": 400.0
+  },
+  "signal_quality": {
+    "is_sufficient": true,
+    "min_rounds_required": 20,
+    "rounds_observed": 100,
+    "min_key_events_required": 2,
+    "key_events_observed": 20,
+    "blocking_reasons": [],
+    "confidence": "high"
+  },
+  "trace_matrix": [
+    {
+      "strategy_metric": "retaliation_rate_after_betrayal",
+      "observed_value": 1.0,
+      "contrast_value": 1.0,
+      "fraud_interpretation": "How aggressively the agent enforces boundaries after hostile behavior.",
+      "skill_ids": [
+        "adaptive_verification_escalation"
+      ]
+    },
+    {
+      "strategy_metric": "mean_retaliation_latency",
+      "observed_value": 1.0,
+      "contrast_value": 1.0,
+      "fraud_interpretation": "How quickly risk controls are tightened after suspicious moves.",
+      "skill_ids": [
+        "adaptive_verification_escalation"
+      ]
+    },
+    {
+      "strategy_metric": "choice_match_prev_opponent_rate",
+      "observed_value": 0.8888888888888888,
+      "contrast_value": 0.9090909090909091,
+      "fraud_interpretation": "Reciprocity sensitivity used to calibrate trust budgeting.",
+      "skill_ids": []
+    },
+    {
+      "strategy_metric": "split_rate",
+      "observed_value": 0.08,
+      "contrast_value": 0.12,
+      "fraud_interpretation": "Baseline permissiveness in cooperative contexts.",
+      "skill_ids": []
+    },
+    {
+      "strategy_metric": "forgiveness_rate_after_retaliation",
+      "observed_value": 0.0,
+      "contrast_value": 0.3333333333333333,
+      "fraud_interpretation": "Ability to recover from false positives after containment.",
+      "skill_ids": []
+    },
+    {
+      "strategy_metric": "betrayal_rate_when_opponent_split",
+      "observed_value": 0.5,
+      "contrast_value": 0.25,
+      "fraud_interpretation": "Likelihood of exploiting cooperative counterpart behavior.",
+      "skill_ids": []
+    },
+    {
+      "strategy_metric": "endgame_steal_delta",
+      "observed_value": 0.29999999999999993,
+      "contrast_value": 0.35,
+      "fraud_interpretation": "Late-session aggression increase that suggests risk escalation needs.",
+      "skill_ids": [
+        "adaptive_verification_escalation",
+        "late_session_risk_tightening"
+      ]
+    }
+  ]
+}
